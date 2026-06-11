@@ -265,9 +265,10 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
 
   async function save() {
     if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
+    const link = meetingLink.trim() || null;
+    if (link && !safeUrl(link)) { toast.error("رابط الاجتماع يجب أن يبدأ بـ https://"); return; }
     setBusy(true);
     const slots = slotsText.split("\n").map((s) => s.trim()).filter(Boolean);
-    const link = meetingLink.trim() || null;
     const payload = {
       title: title.trim(),
       description: description.trim(),
