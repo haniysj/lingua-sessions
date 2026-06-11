@@ -58,7 +58,14 @@ function AdminPage() {
     queryFn: async () => {
       const { data, error } = await supabase.from("courses").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Course[];
+      const rows = data ?? [];
+      const ids = rows.map((r) => r.id);
+      const meetings = new Map<string, string | null>();
+      if (ids.length) {
+        const { data: m } = await supabase.from("course_meetings").select("course_id, meeting_link").in("course_id", ids);
+        (m ?? []).forEach((row) => meetings.set(row.course_id, row.meeting_link));
+      }
+      return rows.map((r) => ({ ...r, meeting_link: meetings.get(r.id) ?? null })) as Course[];
     },
   });
 
