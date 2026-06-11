@@ -201,8 +201,10 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
   const [busy, setBusy] = useState(false);
 
   async function save() {
+    const cleaned = link.trim();
+    if (cleaned && !safeUrl(cleaned)) { toast.error("الرابط يجب أن يبدأ بـ http(s)"); return; }
     setBusy(true);
-    const { error } = await supabase.from("registrations").update({ payment_link: link || null }).eq("id", reg.id);
+    const { error } = await supabase.from("registrations").update({ payment_link: cleaned || null }).eq("id", reg.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم حفظ الرابط");
