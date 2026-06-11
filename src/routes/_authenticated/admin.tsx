@@ -264,17 +264,29 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
     setBusy(true);
     const slots = slotsText.split("\n").map((s) => s.trim()).filter(Boolean);
+    const link = meetingLink.trim() || null;
     const payload = {
       title: title.trim(),
       description: description.trim(),
       audience, session_type: sessionType,
       price: Number(price) || 0,
       schedule_slots: slots,
-      meeting_link: meetingLink.trim() || null,
     };
-    const { error } = course
-      ? await supabase.from("courses").update(payload).eq("id", course.id)
-      : await supabase.from("courses").insert(payload);
+    let courseId = course?.id;
+    let error;
+    if (course) {
+      ({ error } = await supabase.from("courses").update(payload).eq("id", course.id));
+    } else {
+      const ins = await supabase.from("courses").insert(payload).select("id").single();
+      error = ins.error;
+      courseId = ins.data?.id;
+    }
+    if (!error && courseId) {
+      const { error: mErr } = await supabase
+        .from("course_meetings")
+        .upsert({ course_id: courseId, meeting_link: link }, { onConflict: "course_id" });
+      error = mErr ?? error;
+    }
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(course ? "تم التحديث" : "تمت الإضافة");
