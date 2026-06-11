@@ -58,7 +58,7 @@ type RegRow = {
   slot: string | null;
   created_at: string;
   courses: { title: string; session_type: string } | null;
-  profiles: { full_name: string | null; email: string | null } | null;
+  profiles: { full_name: string | null; email: string | null; phone: string | null } | null;
 };
 
 const AUDIENCE_LABEL: Record<string, string> = { teachers: "تدريب معلمين", general: "إنجليزية عامة" };
@@ -97,10 +97,10 @@ function AdminPage() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id)));
-      let profilesById = new Map<string, { full_name: string | null; email: string | null }>();
+      let profilesById = new Map<string, { full_name: string | null; email: string | null; phone: string | null }>();
       if (userIds.length > 0) {
-        const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
-        profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email }]));
+        const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone").in("id", userIds);
+        profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone }]));
       }
       return (data ?? []).map((r) => ({
         ...r,
