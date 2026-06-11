@@ -17,6 +17,11 @@ const schema = z.object({
   email: z.string().trim().email("بريد إلكتروني غير صالح").max(255),
   password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل").max(72),
   fullName: z.string().trim().min(1, "الاسم مطلوب").max(100).optional(),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9\s-]{7,20}$/, "رقم هاتف غير صالح")
+    .optional(),
 });
 
 function AuthPage() {
@@ -24,12 +29,18 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = schema.safeParse({ email, password, fullName: mode === "signup" ? fullName : undefined });
+    const parsed = schema.safeParse({
+      email,
+      password,
+      fullName: mode === "signup" ? fullName : undefined,
+      phone: mode === "signup" && phone ? phone : undefined,
+    });
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
     setBusy(true);
     try {
@@ -43,7 +54,7 @@ function AuthPage() {
           email, password,
           options: {
             emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
-            data: { full_name: fullName },
+            data: { full_name: fullName, phone: phone || null },
           },
         });
         if (error) throw error;
@@ -59,28 +70,43 @@ function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream">
+    <div className="min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-md px-4 py-12">
-        <div className="bg-white border border-brand-navy/5 rounded-2xl p-6 shadow-sm">
-          <div className="flex gap-2 mb-6 p-1 bg-brand-sage/40 rounded-lg">
+        <div className="bg-card border border-brand-navy/10 rounded-2xl p-6 shadow-lg shadow-brand-navy/5">
+          <div className="flex gap-2 mb-6 p-1 bg-brand-sage/60 rounded-lg">
             <button
               type="button"
               onClick={() => setMode("signin")}
-              className={`flex-1 py-2 rounded text-sm font-medium ${mode === "signin" ? "bg-white text-brand-navy shadow-sm" : "text-brand-navy/60"}`}
+              className={`flex-1 py-2 rounded-md text-sm font-bold transition ${mode === "signin" ? "bg-white text-brand-navy shadow-sm" : "text-brand-navy/60"}`}
             >تسجيل دخول</button>
             <button
               type="button"
               onClick={() => setMode("signup")}
-              className={`flex-1 py-2 rounded text-sm font-medium ${mode === "signup" ? "bg-white text-brand-navy shadow-sm" : "text-brand-navy/60"}`}
+              className={`flex-1 py-2 rounded-md text-sm font-bold transition ${mode === "signup" ? "bg-white text-brand-navy shadow-sm" : "text-brand-navy/60"}`}
             >حساب جديد</button>
           </div>
           <form onSubmit={submit} className="space-y-4">
             {mode === "signup" && (
-              <div className="space-y-2">
-                <Label htmlFor="name">الاسم الكامل</Label>
-                <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={100} />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name">الاسم الكامل</Label>
+                  <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={100} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">رقم الهاتف (واتساب)</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+968 9XXX XXXX"
+                    dir="ltr"
+                    maxLength={20}
+                  />
+                  <p className="text-[10px] text-brand-navy/50">يُستخدم لإرسال تفاصيل الحجز وتذكير الحصص عبر الواتساب.</p>
+                </div>
+              </>
             )}
             <div className="space-y-2">
               <Label htmlFor="email">البريد الإلكتروني</Label>
@@ -94,9 +120,6 @@ function AuthPage() {
               {busy ? "…" : mode === "signin" ? "دخول" : "إنشاء حساب"}
             </Button>
           </form>
-          <p className="text-[11px] text-brand-navy/40 text-center mt-4">
-            أول حساب يتم إنشاؤه يحصل تلقائيًا على صلاحيات الإدارة.
-          </p>
         </div>
       </main>
     </div>
