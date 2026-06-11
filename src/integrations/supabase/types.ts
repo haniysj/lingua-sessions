@@ -14,16 +14,133 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      courses: {
+        Row: {
+          audience: Database["public"]["Enums"]["course_audience"]
+          created_at: string
+          description: string
+          id: string
+          meeting_link: string | null
+          price: number
+          schedule_slots: Json
+          session_type: Database["public"]["Enums"]["course_session_type"]
+          title: string
+        }
+        Insert: {
+          audience?: Database["public"]["Enums"]["course_audience"]
+          created_at?: string
+          description?: string
+          id?: string
+          meeting_link?: string | null
+          price?: number
+          schedule_slots?: Json
+          session_type?: Database["public"]["Enums"]["course_session_type"]
+          title: string
+        }
+        Update: {
+          audience?: Database["public"]["Enums"]["course_audience"]
+          created_at?: string
+          description?: string
+          id?: string
+          meeting_link?: string | null
+          price?: number
+          schedule_slots?: Json
+          session_type?: Database["public"]["Enums"]["course_session_type"]
+          title?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      registrations: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          payment_link: string | null
+          slot: string | null
+          user_id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          payment_link?: string | null
+          slot?: string | null
+          user_id: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          payment_link?: string | null
+          slot?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registrations_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "student"
+      course_audience: "teachers" | "general"
+      course_session_type: "private" | "group"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +267,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "student"],
+      course_audience: ["teachers", "general"],
+      course_session_type: ["private", "group"],
+    },
   },
 } as const
