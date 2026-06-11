@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { safeUrl } from "@/lib/safe-url";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -21,6 +22,20 @@ import {
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/admin")({
+  beforeLoad: async () => {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes.user) throw new Error("unauth");
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userRes.user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!data) {
+      const { redirect } = await import("@tanstack/react-router");
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   component: AdminPage,
 });
 
@@ -58,7 +73,14 @@ function AdminPage() {
     queryFn: async () => {
       const { data, error } = await supabase.from("courses").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Course[];
+      const rows = data ?? [];
+      const ids = rows.map((r) => r.id);
+      const meetings = new Map<string, string | null>();
+      if (ids.length) {
+        const { data: m } = await supabase.from("course_meetings").select("course_id, meeting_link").in("course_id", ids);
+        (m ?? []).forEach((row) => meetings.set(row.course_id, row.meeting_link));
+      }
+      return rows.map((r) => ({ ...r, meeting_link: meetings.get(r.id) ?? null })) as Course[];
     },
   });
 
@@ -193,8 +215,10 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
   const [busy, setBusy] = useState(false);
 
   async function save() {
+    const cleaned = link.trim();
+    if (cleaned && !safeUrl(cleaned)) { toast.error("الرابط يجب أن يبدأ بـ http(s)"); return; }
     setBusy(true);
-    const { error } = await supabase.from("registrations").update({ payment_link: link || null }).eq("id", reg.id);
+    const { error } = await supabase.from("registrations").update({ payment_link: cleaned || null }).eq("id", reg.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم حفظ الرابط");
@@ -255,6 +279,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
 
   async function save() {
     if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
+    const link = meetingLink.trim() || null;
+    if (link && !safeUrl(link)) { toast.error("رابط الاجتماع يجب أن يبدأ بـ https://"); return; }
     setBusy(true);
     const slots = slotsText.split("\n").map((s) => s.trim()).filter(Boolean);
     const payload = {
@@ -263,11 +289,22 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       audience, session_type: sessionType,
       price: Number(price) || 0,
       schedule_slots: slots,
-      meeting_link: meetingLink.trim() || null,
     };
-    const { error } = course
-      ? await supabase.from("courses").update(payload).eq("id", course.id)
-      : await supabase.from("courses").insert(payload);
+    let courseId = course?.id;
+    let error;
+    if (course) {
+      ({ error } = await supabase.from("courses").update(payload).eq("id", course.id));
+    } else {
+      const ins = await supabase.from("courses").insert(payload).select("id").single();
+      error = ins.error;
+      courseId = ins.data?.id;
+    }
+    if (!error && courseId) {
+      const { error: mErr } = await supabase
+        .from("course_meetings")
+        .upsert({ course_id: courseId, meeting_link: link }, { onConflict: "course_id" });
+      error = mErr ?? error;
+    }
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(course ? "تم التحديث" : "تمت الإضافة");

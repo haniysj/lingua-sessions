@@ -14,13 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      course_meetings: {
+        Row: {
+          course_id: string
+          meeting_link: string | null
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          meeting_link?: string | null
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          meeting_link?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_meetings_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: true
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           audience: Database["public"]["Enums"]["course_audience"]
           created_at: string
           description: string
           id: string
-          meeting_link: string | null
           price: number
           schedule_slots: Json
           session_type: Database["public"]["Enums"]["course_session_type"]
@@ -31,7 +56,6 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
-          meeting_link?: string | null
           price?: number
           schedule_slots?: Json
           session_type?: Database["public"]["Enums"]["course_session_type"]
@@ -42,7 +66,6 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
-          meeting_link?: string | null
           price?: number
           schedule_slots?: Json
           session_type?: Database["public"]["Enums"]["course_session_type"]
