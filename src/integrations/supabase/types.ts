@@ -104,6 +104,13 @@ export type Database = {
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "registrations_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "public_courses"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_roles: {
@@ -126,7 +133,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_courses: {
+        Row: {
+          audience: Database["public"]["Enums"]["course_audience"] | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          price: number | null
+          schedule_slots: Json | null
+          session_type:
+            | Database["public"]["Enums"]["course_session_type"]
+            | null
+          title: string | null
+        }
+        Insert: {
+          audience?: Database["public"]["Enums"]["course_audience"] | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          price?: number | null
+          schedule_slots?: Json | null
+          session_type?:
+            | Database["public"]["Enums"]["course_session_type"]
+            | null
+          title?: string | null
+        }
+        Update: {
+          audience?: Database["public"]["Enums"]["course_audience"] | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          price?: number | null
+          schedule_slots?: Json | null
+          session_type?:
+            | Database["public"]["Enums"]["course_session_type"]
+            | null
+          title?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
