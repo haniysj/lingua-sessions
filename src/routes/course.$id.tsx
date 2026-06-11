@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { formatOmr } from "@/lib/format";
 
 export const Route = createFileRoute("/course/$id")({
   component: CourseDetail,
@@ -45,11 +46,11 @@ function CourseDetail() {
   }
 
   if (isLoading) return (
-    <div className="min-h-screen bg-brand-cream"><SiteHeader /><div className="p-8 text-center text-brand-navy/50">جارٍ التحميل…</div></div>
+    <div className="min-h-screen"><SiteHeader /><div className="p-8 text-center text-brand-navy/50">جارٍ التحميل…</div></div>
   );
 
   if (!course) return (
-    <div className="min-h-screen bg-brand-cream">
+    <div className="min-h-screen">
       <SiteHeader />
       <div className="p-10 text-center"><p>الدورة غير موجودة.</p>
         <Link to="/" className="text-brand-gold underline text-sm">العودة للدورات</Link>
@@ -60,7 +61,7 @@ function CourseDetail() {
   const slots: string[] = Array.isArray(course.schedule_slots) ? (course.schedule_slots as string[]) : [];
 
   return (
-    <div className="min-h-screen bg-brand-cream text-brand-navy">
+    <div className="min-h-screen text-brand-navy">
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
         <Link to="/" className="text-xs text-brand-navy/50">← كل الدورات</Link>
@@ -73,7 +74,7 @@ function CourseDetail() {
               <h1 className="font-serif text-3xl mt-3">{course.title}</h1>
               <p className="text-xs text-brand-navy/50 mt-1">{SESSION_LABEL[course.session_type] ?? course.session_type}</p>
             </div>
-            <span className="text-brand-gold font-medium text-lg">{Number(course.price).toFixed(2)} $</span>
+            <span className="text-brand-gold font-bold text-lg">{formatOmr(course.price)}</span>
           </div>
           <p className="text-sm text-brand-navy/70 leading-relaxed whitespace-pre-line">{course.description}</p>
 

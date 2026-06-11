@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
+import { formatOmr } from "@/lib/format";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,7 +28,7 @@ function HomePage() {
   });
 
   return (
-    <div className="min-h-screen bg-brand-cream text-brand-navy">
+    <div className="min-h-screen text-brand-navy">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-10 space-y-12">
         <section className="text-center space-y-4 py-8">
@@ -63,7 +64,7 @@ function HomePage() {
                     <span className="bg-brand-sage text-brand-navy text-[10px] font-bold px-2 py-1 rounded-full">
                       {AUDIENCE_LABEL[c.audience] ?? c.audience}
                     </span>
-                    <span className="text-brand-gold font-medium text-sm">{Number(c.price).toFixed(2)} $</span>
+                    <span className="text-brand-gold font-bold text-sm">{formatOmr(c.price)}</span>
                   </div>
                   <h3 className="font-serif text-lg mb-1">{c.title}</h3>
                   <p className="text-xs text-brand-navy/60 mb-3 flex-1">{c.description || "—"}</p>

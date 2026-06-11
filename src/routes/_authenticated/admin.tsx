@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { safeUrl } from "@/lib/safe-url";
+import { formatOmr, waLink } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -57,7 +58,7 @@ type RegRow = {
   slot: string | null;
   created_at: string;
   courses: { title: string; session_type: string } | null;
-  profiles: { full_name: string | null; email: string | null } | null;
+  profiles: { full_name: string | null; email: string | null; phone: string | null } | null;
 };
 
 const AUDIENCE_LABEL: Record<string, string> = { teachers: "تدريب معلمين", general: "إنجليزية عامة" };
@@ -96,10 +97,10 @@ function AdminPage() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id)));
-      let profilesById = new Map<string, { full_name: string | null; email: string | null }>();
+      let profilesById = new Map<string, { full_name: string | null; email: string | null; phone: string | null }>();
       if (userIds.length > 0) {
-        const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
-        profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email }]));
+        const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone").in("id", userIds);
+        profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone }]));
       }
       return (data ?? []).map((r) => ({
         ...r,
@@ -125,14 +126,14 @@ function AdminPage() {
 
   if (loading) return <div className="p-10 text-center text-sm text-brand-navy/50">…</div>;
   if (!isAdmin) return (
-    <div className="min-h-screen bg-brand-cream">
+    <div className="min-h-screen">
       <SiteHeader />
       <div className="p-10 text-center text-sm text-brand-navy/60">هذه الصفحة للمشرفين فقط.</div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-brand-cream text-brand-navy">
+    <div className="min-h-screen text-brand-navy">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-8 space-y-10">
         <header className="flex items-end justify-between">
@@ -169,7 +170,7 @@ function AdminPage() {
                       {AUDIENCE_LABEL[c.audience]}
                     </span>
                     <span className="text-[10px] text-brand-navy/50">{SESSION_LABEL[c.session_type]}</span>
-                    <span className="text-brand-gold text-xs font-medium">{Number(c.price).toFixed(2)} $</span>
+                    <span className="text-brand-gold text-xs font-bold">{formatOmr(c.price)}</span>
                   </div>
                   <h3 className="font-medium">{c.title}</h3>
                   <p className="text-xs text-brand-navy/50 line-clamp-1">{c.description}</p>
@@ -228,8 +229,26 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
   function sendEmail() {
     if (!link) { toast.error("أضِف رابط الدفع أولاً"); return; }
     const subject = encodeURIComponent(`رابط الدفع — ${reg.courses?.title ?? "دورتك"}`);
-    const body = encodeURIComponent(`أهلاً ${reg.profiles?.full_name ?? ""}\n\nيرجى إكمال الدفع عبر الرابط التالي:\n${link}\n\nشكرًا.`);
+    const body = encodeURIComponent(
+      `أهلاً ${reg.profiles?.full_name ?? ""}\n\n` +
+      `تفاصيل حجزك:\n` +
+      `الدورة: ${reg.courses?.title ?? ""}\n` +
+      `الموعد: ${reg.slot ?? "سيتم التنسيق"}\n\n` +
+      `يرجى إكمال الدفع عبر الرابط التالي:\n${link}\n\nشكرًا لك.`
+    );
     window.location.href = `mailto:${reg.profiles?.email ?? ""}?subject=${subject}&body=${body}`;
+  }
+
+  function sendWhatsApp() {
+    if (!link) { toast.error("أضِف رابط الدفع أولاً"); return; }
+    const msg =
+      `أهلاً ${reg.profiles?.full_name ?? ""} 👋\n\n` +
+      `تفاصيل حجزك في *${reg.courses?.title ?? "دورتك"}*:\n` +
+      `• الموعد: ${reg.slot ?? "سيتم التنسيق"}\n\n` +
+      `رابط الدفع: ${link}`;
+    const url = waLink(reg.profiles?.phone, msg);
+    if (!url) { toast.error("لا يوجد رقم هاتف لهذا الطالب"); return; }
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -237,12 +256,15 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold">{reg.profiles?.full_name || "—"}</p>
         <p className="text-[11px] text-brand-navy/50" dir="ltr">{reg.profiles?.email ?? ""}</p>
+        {reg.profiles?.phone && (
+          <p className="text-[11px] text-brand-navy/50" dir="ltr">📱 {reg.profiles.phone}</p>
+        )}
         <p className="text-[11px] text-brand-navy/60 mt-1">
           {reg.courses?.title ?? "دورة"} · {SESSION_LABEL[reg.courses?.session_type ?? ""] ?? ""}
           {reg.slot ? ` · ${reg.slot}` : ""}
         </p>
       </div>
-      <div className="flex gap-2 items-center">
+      <div className="flex flex-wrap gap-2 items-center">
         <Input
           placeholder="رابط الدفع"
           value={link}
@@ -251,7 +273,8 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
           dir="ltr"
         />
         <Button size="sm" variant="outline" onClick={save} disabled={busy}>حفظ</Button>
-        <Button size="sm" onClick={sendEmail} className="bg-brand-gold text-white hover:bg-brand-gold/90">إرسال</Button>
+        <Button size="sm" onClick={sendEmail} className="bg-brand-navy text-white hover:bg-brand-navy/90">📧 بريد</Button>
+        <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬 واتساب</Button>
       </div>
     </div>
   );
