@@ -133,7 +133,7 @@ function AdminPage() {
   );
 
   return (
-    <div className="min-h-screen bg-brand-cream text-brand-navy">
+    <div className="min-h-screen text-brand-navy">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-8 space-y-10">
         <header className="flex items-end justify-between">
