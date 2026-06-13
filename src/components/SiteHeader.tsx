@@ -1,10 +1,12 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
+import { useSiteSettings } from "@/hooks/use-site-settings";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
 export function SiteHeader() {
   const { user, isAdmin } = useAuth();
+  const { data: site } = useSiteSettings();
   const navigate = useNavigate();
 
   async function signOut() {
@@ -12,12 +14,21 @@ export function SiteHeader() {
     navigate({ to: "/" });
   }
 
+  const name = site?.site_name || "لينغويست";
+  const logo = site?.logo_url || null;
+
   return (
     <header className="sticky top-0 z-50 bg-brand-cream/85 backdrop-blur-md border-b border-brand-navy/5">
       <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
         <Link to="/" className="flex items-center gap-2">
-          <div className="size-9 bg-brand-navy rounded-md flex items-center justify-center text-white font-serif text-xl">ل</div>
-          <span className="font-serif font-bold text-lg tracking-tight text-brand-navy">لينغويست</span>
+          {logo ? (
+            <img src={logo} alt={name} className="size-9 rounded-md object-cover bg-white" />
+          ) : (
+            <div className="size-9 bg-brand-navy rounded-md flex items-center justify-center text-white font-serif text-xl">
+              {name.charAt(0)}
+            </div>
+          )}
+          <span className="font-serif font-bold text-lg tracking-tight text-brand-navy">{name}</span>
         </Link>
         <nav className="flex items-center gap-2 text-sm">
           <Link to="/" className="px-2 py-1 text-brand-navy/70 hover:text-brand-navy">الدورات</Link>
