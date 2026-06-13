@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { safeUrl } from "@/lib/safe-url";
-import { formatOmr, waLink } from "@/lib/format";
+import { formatOmr, waLink, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -20,6 +20,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -27,11 +28,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
     const { data: userRes } = await supabase.auth.getUser();
     if (!userRes.user) throw new Error("unauth");
     const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userRes.user.id)
-      .eq("role", "admin")
-      .maybeSingle();
+      .from("user_roles").select("role").eq("user_id", userRes.user.id).eq("role", "admin").maybeSingle();
     if (!data) {
       const { redirect } = await import("@tanstack/react-router");
       throw redirect({ to: "/dashboard" });
@@ -47,6 +44,10 @@ type Course = {
   audience: "teachers" | "general";
   session_type: "private" | "group";
   price: number;
+  hourly_rate: number;
+  hours_per_week: number;
+  start_date: string | null;
+  end_date: string | null;
   schedule_slots: string[] | unknown;
   meeting_link: string | null;
 };
@@ -58,17 +59,114 @@ type RegRow = {
   slot: string | null;
   created_at: string;
   courses: { title: string; session_type: string } | null;
-  profiles: { full_name: string | null; email: string | null; phone: string | null } | null;
+  profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
 
 const AUDIENCE_LABEL: Record<string, string> = { teachers: "تدريب معلمين", general: "إنجليزية عامة" };
 const SESSION_LABEL: Record<string, string> = { private: "خاصة", group: "جماعية" };
+const LEVELS = ["A1","A2","B1","B2","C1","C2"];
 
 function AdminPage() {
   const { isAdmin, loading } = useAuth();
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
 
+  if (loading) return <div className="p-10 text-center text-sm text-brand-navy/50">…</div>;
+  if (!isAdmin) return (
+    <div className="min-h-screen"><SiteHeader />
+      <div className="p-10 text-center text-sm text-brand-navy/60">هذه الصفحة للمشرفين فقط.</div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen text-brand-navy">
+      <SiteHeader />
+      <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+        <header>
+          <h1 className="font-serif text-3xl">لوحة الإدارة</h1>
+          <p className="text-sm text-brand-navy/50">إدارة المنصة والدورات والطلاب</p>
+        </header>
+
+        <Tabs defaultValue="courses" className="w-full">
+          <TabsList className="bg-brand-sage/50">
+            <TabsTrigger value="courses">الدورات</TabsTrigger>
+            <TabsTrigger value="regs">التسجيلات والطلاب</TabsTrigger>
+            <TabsTrigger value="quizzes">الاختبارات</TabsTrigger>
+            <TabsTrigger value="settings">إعدادات المنصة</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="courses" className="mt-6">
+            <CoursesSection qc={qc} />
+          </TabsContent>
+          <TabsContent value="regs" className="mt-6">
+            <RegistrationsSection qc={qc} />
+          </TabsContent>
+          <TabsContent value="quizzes" className="mt-6">
+            <QuizzesSection />
+          </TabsContent>
+          <TabsContent value="settings" className="mt-6">
+            <SettingsSection />
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+}
+
+/* -------- Settings -------- */
+function SettingsSection() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["site-settings-admin"],
+    queryFn: async () => {
+      const { data } = await supabase.from("site_settings").select("*").eq("id", true).maybeSingle();
+      return data;
+    },
+  });
+  const [name, setName] = useState("");
+  const [logo, setLogo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (data) { setName(data.site_name ?? ""); setLogo(data.logo_url ?? ""); }
+  }, [data]);
+
+  async function save() {
+    if (!name.trim()) { toast.error("اسم المنصة مطلوب"); return; }
+    if (logo && !safeUrl(logo)) { toast.error("رابط الشعار يجب أن يبدأ بـ https://"); return; }
+    setBusy(true);
+    const { error } = await supabase.from("site_settings")
+      .upsert({ id: true, site_name: name.trim(), logo_url: logo.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "id" });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("تم الحفظ");
+    qc.invalidateQueries({ queryKey: ["site-settings"] });
+    qc.invalidateQueries({ queryKey: ["site-settings-admin"] });
+  }
+
+  if (isLoading) return <p className="text-sm text-brand-navy/50">…</p>;
+  return (
+    <div className="bg-white border border-brand-navy/5 rounded-xl p-6 space-y-4 max-w-xl">
+      <h2 className="font-serif text-xl">إعدادات المنصة</h2>
+      <div className="space-y-2">
+        <Label>اسم المنصة</Label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+      </div>
+      <div className="space-y-2">
+        <Label>رابط شعار المنصة (URL)</Label>
+        <Input value={logo} onChange={(e) => setLogo(e.target.value)} dir="ltr" placeholder="https://..." />
+        {logo && safeUrl(logo) && (
+          <img src={logo} alt="معاينة" className="size-16 rounded-md object-cover bg-brand-sage/40 mt-2" />
+        )}
+      </div>
+      <Button onClick={save} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
+        {busy ? "…" : "حفظ"}
+      </Button>
+    </div>
+  );
+}
+
+/* -------- Courses -------- */
+function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   const courses = useQuery({
     queryKey: ["admin-courses"],
     queryFn: async () => {
@@ -85,232 +183,480 @@ function AdminPage() {
     },
   });
 
+  return (
+    <section className="space-y-4">
+      <div className="flex justify-between items-end">
+        <h2 className="font-serif text-2xl">الدورات</h2>
+        <CourseDialog onSaved={() => qc.invalidateQueries({ queryKey: ["admin-courses"] })} />
+      </div>
+      <div className="space-y-3">
+        {(courses.data ?? []).map((c) => {
+          const weeks = weeksBetween(c.start_date, c.end_date);
+          const hours = totalHours(weeks, c.hours_per_week);
+          const total = hours * Number(c.hourly_rate ?? 0);
+          return (
+            <div key={c.id} className="bg-white border border-brand-navy/5 p-4 rounded-xl flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="bg-brand-sage text-brand-navy text-[9px] font-bold px-2 py-0.5 rounded-full">{AUDIENCE_LABEL[c.audience]}</span>
+                  <span className="text-[10px] text-brand-navy/50">{SESSION_LABEL[c.session_type]}</span>
+                  <span className="text-brand-gold text-xs font-bold">{formatOmr(total || c.price)}</span>
+                </div>
+                <h3 className="font-medium">{c.title}</h3>
+                <p className="text-[11px] text-brand-navy/55">
+                  {c.start_date && c.end_date ? `${formatDateAr(c.start_date)} → ${formatDateAr(c.end_date)} · ${weeks} أسبوع · ${hours} ساعة` : "بدون فترة محدّدة"}
+                </p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <ManageMaterials courseId={c.id} />
+                <CourseDialog course={c} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-courses"] })} />
+                <DeleteCourseButton id={c.id} onDeleted={() => qc.invalidateQueries({ queryKey: ["admin-courses"] })} />
+              </div>
+            </div>
+          );
+        })}
+        {courses.data?.length === 0 && (
+          <p className="text-xs text-brand-navy/40 text-center py-6">لا توجد دورات بعد.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* -------- Materials -------- */
+function ManageMaterials({ courseId }: { courseId: string }) {
+  const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["materials", courseId],
+    enabled: open,
+    queryFn: async () => {
+      const { data } = await supabase.from("course_materials").select("*").eq("course_id", courseId).order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+  const [busy, setBusy] = useState(false);
+
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const path = `${courseId}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage.from("materials").upload(path, file);
+      if (upErr) throw upErr;
+      const { error } = await supabase.from("course_materials").insert({ course_id: courseId, title: file.name, storage_path: path });
+      if (error) throw error;
+      toast.success("تم الرفع");
+      qc.invalidateQueries({ queryKey: ["materials", courseId] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "فشل الرفع");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  }
+
+  async function del(id: string, path: string) {
+    await supabase.storage.from("materials").remove([path]);
+    await supabase.from("course_materials").delete().eq("id", id);
+    qc.invalidateQueries({ queryKey: ["materials", courseId] });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">📎 المواد</Button>
+      </DialogTrigger>
+      <DialogContent dir="rtl">
+        <DialogHeader><DialogTitle>المواد التعليمية</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">رفع ملف جديد</Label>
+            <Input type="file" onChange={upload} disabled={busy} />
+          </div>
+          <ul className="divide-y divide-brand-navy/5 max-h-64 overflow-auto">
+            {(data ?? []).map((m) => (
+              <li key={m.id} className="flex justify-between py-2 text-sm">
+                <span className="truncate">{m.title}</span>
+                <button onClick={() => del(m.id, m.storage_path)} className="text-red-600 text-xs">حذف</button>
+              </li>
+            ))}
+            {(data ?? []).length === 0 && <li className="text-xs text-brand-navy/40 py-3">لا توجد ملفات.</li>}
+          </ul>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* -------- Registrations -------- */
+function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
+  const [search, setSearch] = useState("");
   const regs = useQuery({
     queryKey: ["admin-regs"],
     queryFn: async () => {
-      // Join via two queries because profile RLS only allows self read; admins bypass via service? No.
-      // Profiles RLS allows self read only. We'll fetch registrations, then look up profiles via service is not available.
-      // Workaround: add admin profile read policy — but for simplicity, we'll fetch what we can via two-step using user_roles admin status.
       const { data, error } = await supabase
         .from("registrations")
         .select("id, user_id, payment_link, slot, created_at, courses(title, session_type)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id)));
-      let profilesById = new Map<string, { full_name: string | null; email: string | null; phone: string | null }>();
-      if (userIds.length > 0) {
-        const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone").in("id", userIds);
-        profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone }]));
+      let profilesById = new Map<string, RegRow["profiles"]>();
+      if (userIds.length) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone, level, level_notes").in("id", userIds);
+        profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone, level: p.level, level_notes: p.level_notes }]));
       }
-      return (data ?? []).map((r) => ({
-        ...r,
-        profiles: profilesById.get(r.user_id) ?? null,
-      })) as unknown as RegRow[];
+      return (data ?? []).map((r) => ({ ...r, profiles: profilesById.get(r.user_id) ?? null })) as unknown as RegRow[];
     },
   });
-
-  const totalStudents = useMemo(() => {
-    const s = new Set(regs.data?.map((r) => r.user_id) ?? []);
-    return s.size;
-  }, [regs.data]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return regs.data ?? [];
     return (regs.data ?? []).filter((r) =>
       (r.profiles?.full_name ?? "").toLowerCase().includes(q) ||
+      (r.profiles?.phone ?? "").toLowerCase().includes(q) ||
       (r.profiles?.email ?? "").toLowerCase().includes(q) ||
       (r.courses?.title ?? "").toLowerCase().includes(q),
     );
   }, [regs.data, search]);
 
-  if (loading) return <div className="p-10 text-center text-sm text-brand-navy/50">…</div>;
-  if (!isAdmin) return (
-    <div className="min-h-screen">
-      <SiteHeader />
-      <div className="p-10 text-center text-sm text-brand-navy/60">هذه الصفحة للمشرفين فقط.</div>
-    </div>
-  );
-
   return (
-    <div className="min-h-screen text-brand-navy">
-      <SiteHeader />
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-10">
-        <header className="flex items-end justify-between">
-          <div>
-            <h1 className="font-serif text-3xl">لوحة الإدارة</h1>
-            <p className="text-sm text-brand-navy/50">إدارة الدورات والطلاب والمدفوعات</p>
-          </div>
-        </header>
-
-        {/* Stats */}
-        <section className="grid grid-cols-2 gap-3">
-          <div className="bg-brand-navy text-white p-5 rounded-xl space-y-1">
-            <span className="text-[10px] uppercase tracking-widest opacity-70">إجمالي الطلاب المسجلين</span>
-            <p className="text-4xl font-serif">{totalStudents}</p>
-          </div>
-          <div className="bg-brand-sage p-5 rounded-xl border border-brand-navy/5 space-y-1">
-            <span className="text-[10px] uppercase tracking-widest text-brand-navy/60">الدورات النشطة</span>
-            <p className="text-4xl font-serif">{courses.data?.length ?? 0}</p>
-          </div>
-        </section>
-
-        {/* Courses CRUD */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-end">
-            <h2 className="font-serif text-2xl">الدورات</h2>
-            <CourseDialog onSaved={() => qc.invalidateQueries({ queryKey: ["admin-courses"] })} />
-          </div>
-          <div className="space-y-3">
-            {(courses.data ?? []).map((c) => (
-              <div key={c.id} className="bg-white border border-brand-navy/5 p-4 rounded-xl flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="bg-brand-sage text-brand-navy text-[9px] font-bold px-2 py-0.5 rounded-full">
-                      {AUDIENCE_LABEL[c.audience]}
-                    </span>
-                    <span className="text-[10px] text-brand-navy/50">{SESSION_LABEL[c.session_type]}</span>
-                    <span className="text-brand-gold text-xs font-bold">{formatOmr(c.price)}</span>
-                  </div>
-                  <h3 className="font-medium">{c.title}</h3>
-                  <p className="text-xs text-brand-navy/50 line-clamp-1">{c.description}</p>
-                </div>
-                <div className="flex gap-2">
-                  <CourseDialog course={c} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-courses"] })} />
-                  <DeleteCourseButton id={c.id} onDeleted={() => qc.invalidateQueries({ queryKey: ["admin-courses"] })} />
-                </div>
-              </div>
-            ))}
-            {courses.data?.length === 0 && (
-              <p className="text-xs text-brand-navy/40 text-center py-6">لا توجد دورات بعد. أضِف أول دورة.</p>
-            )}
-          </div>
-        </section>
-
-        {/* Registrations */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-end gap-3">
-            <h2 className="font-serif text-2xl">التسجيلات</h2>
-            <Input
-              placeholder="بحث بالاسم أو البريد أو الدورة"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
-            />
-          </div>
-          <div className="bg-white border border-brand-navy/5 rounded-xl divide-y divide-brand-navy/5">
-            {filtered.length === 0 ? (
-              <p className="p-6 text-center text-xs text-brand-navy/40">لا توجد تسجيلات.</p>
-            ) : filtered.map((r) => (
-              <RegistrationRow key={r.id} reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
-            ))}
-          </div>
-        </section>
-      </main>
-    </div>
+    <section className="space-y-4">
+      <div className="flex justify-between items-end gap-3">
+        <h2 className="font-serif text-2xl">التسجيلات</h2>
+        <Input placeholder="بحث" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+      </div>
+      <div className="bg-white border border-brand-navy/5 rounded-xl divide-y divide-brand-navy/5">
+        {filtered.length === 0 ? (
+          <p className="p-6 text-center text-xs text-brand-navy/40">لا توجد تسجيلات.</p>
+        ) : filtered.map((r) => (
+          <RegistrationRow key={r.id} reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
+        ))}
+      </div>
+    </section>
   );
 }
 
 function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
   const [link, setLink] = useState(reg.payment_link ?? "");
+  const [level, setLevel] = useState(reg.profiles?.level ?? "");
+  const [levelNotes, setLevelNotes] = useState(reg.profiles?.level_notes ?? "");
   const [busy, setBusy] = useState(false);
 
-  async function save() {
+  async function saveLink() {
     const cleaned = link.trim();
-    if (cleaned && !safeUrl(cleaned)) { toast.error("الرابط يجب أن يبدأ بـ http(s)"); return; }
+    if (cleaned && !safeUrl(cleaned)) { toast.error("الرابط غير صالح"); return; }
     setBusy(true);
     const { error } = await supabase.from("registrations").update({ payment_link: cleaned || null }).eq("id", reg.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("تم حفظ الرابط");
-    onSaved();
+    toast.success("تم الحفظ"); onSaved();
+  }
+
+  async function saveLevel() {
+    setBusy(true);
+    const { error } = await supabase.from("profiles").update({ level: level || null, level_notes: levelNotes || null }).eq("id", reg.user_id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("تم تحديث المستوى"); onSaved();
   }
 
   function sendEmail() {
-    if (!link) { toast.error("أضِف رابط الدفع أولاً"); return; }
+    if (!link) { toast.error("أضف الرابط أولاً"); return; }
     const subject = encodeURIComponent(`رابط الدفع — ${reg.courses?.title ?? "دورتك"}`);
-    const body = encodeURIComponent(
-      `أهلاً ${reg.profiles?.full_name ?? ""}\n\n` +
-      `تفاصيل حجزك:\n` +
-      `الدورة: ${reg.courses?.title ?? ""}\n` +
-      `الموعد: ${reg.slot ?? "سيتم التنسيق"}\n\n` +
-      `يرجى إكمال الدفع عبر الرابط التالي:\n${link}\n\nشكرًا لك.`
-    );
+    const body = encodeURIComponent(`أهلاً ${reg.profiles?.full_name ?? ""}\n\nرابط الدفع: ${link}`);
     window.location.href = `mailto:${reg.profiles?.email ?? ""}?subject=${subject}&body=${body}`;
   }
-
   function sendWhatsApp() {
-    if (!link) { toast.error("أضِف رابط الدفع أولاً"); return; }
-    const msg =
-      `أهلاً ${reg.profiles?.full_name ?? ""} 👋\n\n` +
-      `تفاصيل حجزك في *${reg.courses?.title ?? "دورتك"}*:\n` +
-      `• الموعد: ${reg.slot ?? "سيتم التنسيق"}\n\n` +
-      `رابط الدفع: ${link}`;
+    if (!link) { toast.error("أضف الرابط أولاً"); return; }
+    const msg = `أهلاً ${reg.profiles?.full_name ?? ""} 👋\nتفاصيل حجزك في *${reg.courses?.title ?? "دورتك"}*\nرابط الدفع: ${link}`;
     const url = waLink(reg.profiles?.phone, msg);
-    if (!url) { toast.error("لا يوجد رقم هاتف لهذا الطالب"); return; }
+    if (!url) { toast.error("لا يوجد هاتف"); return; }
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
   return (
-    <div className="p-4 flex flex-col md:flex-row md:items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold">{reg.profiles?.full_name || "—"}</p>
-        <p className="text-[11px] text-brand-navy/50" dir="ltr">{reg.profiles?.email ?? ""}</p>
-        {reg.profiles?.phone && (
-          <p className="text-[11px] text-brand-navy/50" dir="ltr">📱 {reg.profiles.phone}</p>
-        )}
-        <p className="text-[11px] text-brand-navy/60 mt-1">
-          {reg.courses?.title ?? "دورة"} · {SESSION_LABEL[reg.courses?.session_type ?? ""] ?? ""}
-          {reg.slot ? ` · ${reg.slot}` : ""}
-        </p>
+    <div className="p-4 space-y-3">
+      <div className="flex flex-col md:flex-row md:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold">{reg.profiles?.full_name || "—"}
+            {reg.profiles?.level && <span className="ms-2 text-[10px] bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded-full">{reg.profiles.level}</span>}
+          </p>
+          <p className="text-[11px] text-brand-navy/50" dir="ltr">{reg.profiles?.email ?? ""}</p>
+          {reg.profiles?.phone && <p className="text-[11px] text-brand-navy/50" dir="ltr">📱 {reg.profiles.phone}</p>}
+          <p className="text-[11px] text-brand-navy/60 mt-1">{reg.courses?.title ?? "دورة"} · {reg.slot ?? "—"}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Input placeholder="رابط الدفع" value={link} onChange={(e) => setLink(e.target.value)} className="w-56 text-xs" dir="ltr" />
+          <Button size="sm" variant="outline" onClick={saveLink} disabled={busy}>حفظ</Button>
+          <Button size="sm" onClick={sendEmail} className="bg-brand-navy text-white hover:bg-brand-navy/90">📧</Button>
+          <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬</Button>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2 items-center">
-        <Input
-          placeholder="رابط الدفع"
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-          className="w-56 text-xs"
-          dir="ltr"
-        />
-        <Button size="sm" variant="outline" onClick={save} disabled={busy}>حفظ</Button>
-        <Button size="sm" onClick={sendEmail} className="bg-brand-navy text-white hover:bg-brand-navy/90">📧 بريد</Button>
-        <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬 واتساب</Button>
+      <div className="flex flex-wrap gap-2 items-end bg-brand-sage/30 p-3 rounded-lg">
+        <div>
+          <Label className="text-[10px]">مستوى الطالب</Label>
+          <Select value={level || "none"} onValueChange={(v) => setLevel(v === "none" ? "" : v)}>
+            <SelectTrigger className="w-24 h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">—</SelectItem>
+              {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1 min-w-32">
+          <Label className="text-[10px]">ملاحظات تقدّم</Label>
+          <Input value={levelNotes} onChange={(e) => setLevelNotes(e.target.value)} className="h-8 text-xs" />
+        </div>
+        <Button size="sm" variant="outline" onClick={saveLevel} disabled={busy}>تحديث المستوى</Button>
+        <HomeworkReview userId={reg.user_id} courseTitle={reg.courses?.title ?? ""} />
       </div>
     </div>
   );
 }
 
+function HomeworkReview({ userId, courseTitle }: { userId: string; courseTitle: string }) {
+  const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["hw-admin", userId],
+    enabled: open,
+    queryFn: async () => {
+      const { data } = await supabase.from("homework_submissions").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  async function openFile(path: string) {
+    const { data } = await supabase.storage.from("homework").createSignedUrl(path, 60);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  }
+
+  async function grade(id: string, feedback: string, gradeVal: string) {
+    await supabase.from("homework_submissions").update({ feedback, grade: gradeVal }).eq("id", id);
+    toast.success("تم التقييم");
+    qc.invalidateQueries({ queryKey: ["hw-admin", userId] });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button size="sm" variant="outline">📝 الواجبات</Button></DialogTrigger>
+      <DialogContent dir="rtl" className="max-w-lg">
+        <DialogHeader><DialogTitle>واجبات — {courseTitle}</DialogTitle></DialogHeader>
+        <ul className="space-y-3 max-h-96 overflow-auto">
+          {(data ?? []).map((h) => (
+            <li key={h.id} className="border border-brand-navy/10 p-3 rounded-lg space-y-2">
+              <div className="flex justify-between text-xs">
+                <button onClick={() => openFile(h.storage_path)} className="text-brand-gold underline">{h.title || "ملف"}</button>
+                <span className="text-brand-navy/40">{new Date(h.created_at).toLocaleDateString("ar")}</span>
+              </div>
+              <GradeForm id={h.id} initFeedback={h.feedback ?? ""} initGrade={h.grade ?? ""} onSave={grade} />
+            </li>
+          ))}
+          {(data ?? []).length === 0 && <li className="text-xs text-brand-navy/40">لا توجد واجبات.</li>}
+        </ul>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GradeForm({ id, initFeedback, initGrade, onSave }: { id: string; initFeedback: string; initGrade: string; onSave: (id: string, f: string, g: string) => void }) {
+  const [f, setF] = useState(initFeedback);
+  const [g, setG] = useState(initGrade);
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input value={g} onChange={(e) => setG(e.target.value)} placeholder="الدرجة (مثل 8/10)" className="h-8 text-xs w-32" />
+        <Input value={f} onChange={(e) => setF(e.target.value)} placeholder="ملاحظات" className="h-8 text-xs flex-1" />
+        <Button size="sm" variant="outline" onClick={() => onSave(id, f, g)}>حفظ</Button>
+      </div>
+    </div>
+  );
+}
+
+/* -------- Quizzes -------- */
+function QuizzesSection() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["admin-quizzes"],
+    queryFn: async () => {
+      const { data } = await supabase.from("quizzes").select("*, quiz_questions(id)").order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  async function del(id: string) {
+    await supabase.from("quizzes").delete().eq("id", id);
+    qc.invalidateQueries({ queryKey: ["admin-quizzes"] });
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex justify-between items-end">
+        <h2 className="font-serif text-2xl">الاختبارات</h2>
+        <QuizDialog onSaved={() => qc.invalidateQueries({ queryKey: ["admin-quizzes"] })} />
+      </div>
+      <div className="space-y-2">
+        {(data ?? []).map((q: { id: string; title: string; description: string; quiz_questions?: { id: string }[] }) => (
+          <div key={q.id} className="bg-white border border-brand-navy/5 p-3 rounded-xl flex justify-between items-center">
+            <div>
+              <p className="font-medium text-sm">{q.title}</p>
+              <p className="text-[11px] text-brand-navy/50">{q.quiz_questions?.length ?? 0} سؤال</p>
+            </div>
+            <div className="flex gap-2">
+              <QuizDialog quiz={q} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-quizzes"] })} />
+              <Button size="sm" variant="outline" className="text-red-600" onClick={() => del(q.id)}>حذف</Button>
+            </div>
+          </div>
+        ))}
+        {(data ?? []).length === 0 && <p className="text-xs text-brand-navy/40 text-center py-4">لا اختبارات.</p>}
+      </div>
+    </section>
+  );
+}
+
+type QuizQuestion = { prompt: string; choices: string[]; correct_index: number };
+
+function QuizDialog({ quiz, onSaved }: { quiz?: { id: string; title: string; description: string }; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(quiz?.title ?? "");
+  const [description, setDescription] = useState(quiz?.description ?? "");
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open && quiz) {
+      supabase.from("quiz_questions").select("*").eq("quiz_id", quiz.id).order("position").then(({ data }) => {
+        setQuestions((data ?? []).map((q) => ({ prompt: q.prompt, choices: (q.choices as string[]) ?? [], correct_index: q.correct_index })));
+      });
+    } else if (open) {
+      setQuestions([{ prompt: "", choices: ["", ""], correct_index: 0 }]);
+    }
+  }, [open, quiz]);
+
+  function updateQ(i: number, patch: Partial<QuizQuestion>) {
+    setQuestions((qs) => qs.map((q, idx) => idx === i ? { ...q, ...patch } : q));
+  }
+
+  async function save() {
+    if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
+    setBusy(true);
+    try {
+      let qid = quiz?.id;
+      if (quiz) {
+        await supabase.from("quizzes").update({ title, description }).eq("id", quiz.id);
+        await supabase.from("quiz_questions").delete().eq("quiz_id", quiz.id);
+      } else {
+        const { data, error } = await supabase.from("quizzes").insert({ title, description }).select("id").single();
+        if (error) throw error;
+        qid = data.id;
+      }
+      if (qid && questions.length) {
+        const rows = questions.filter((q) => q.prompt.trim()).map((q, i) => ({
+          quiz_id: qid, position: i, prompt: q.prompt, choices: q.choices, correct_index: q.correct_index,
+        }));
+        if (rows.length) {
+          const { error } = await supabase.from("quiz_questions").insert(rows);
+          if (error) throw error;
+        }
+      }
+      toast.success("تم الحفظ");
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "خطأ");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {quiz ? <Button size="sm" variant="outline">تعديل</Button> :
+          <button className="text-[11px] font-semibold uppercase tracking-wider text-brand-gold border-b border-brand-gold/30 pb-0.5">+ اختبار جديد</button>}
+      </DialogTrigger>
+      <DialogContent dir="rtl" className="max-w-xl max-h-[85vh] overflow-auto">
+        <DialogHeader><DialogTitle>{quiz ? "تعديل اختبار" : "اختبار جديد"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1"><Label>العنوان</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+          <div className="space-y-1"><Label>الوصف</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /></div>
+          <div className="space-y-3">
+            {questions.map((q, i) => (
+              <div key={i} className="border border-brand-navy/10 p-3 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-xs">سؤال {i + 1}</Label>
+                  <button onClick={() => setQuestions((qs) => qs.filter((_, idx) => idx !== i))} className="text-red-600 text-xs">حذف</button>
+                </div>
+                <Input value={q.prompt} onChange={(e) => updateQ(i, { prompt: e.target.value })} placeholder="نص السؤال" />
+                {q.choices.map((c, ci) => (
+                  <div key={ci} className="flex gap-2 items-center">
+                    <input type="radio" checked={q.correct_index === ci} onChange={() => updateQ(i, { correct_index: ci })} />
+                    <Input value={c} onChange={(e) => updateQ(i, { choices: q.choices.map((x, xi) => xi === ci ? e.target.value : x) })} placeholder={`اختيار ${ci + 1}`} className="text-xs" />
+                    {q.choices.length > 2 && (
+                      <button onClick={() => updateQ(i, { choices: q.choices.filter((_, xi) => xi !== ci), correct_index: 0 })} className="text-red-600 text-xs">×</button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={() => updateQ(i, { choices: [...q.choices, ""] })} className="text-xs text-brand-gold">+ اختيار</button>
+              </div>
+            ))}
+            <button onClick={() => setQuestions((qs) => [...qs, { prompt: "", choices: ["", ""], correct_index: 0 }])} className="text-xs text-brand-navy/70 border border-dashed border-brand-navy/20 w-full py-2 rounded">+ سؤال</button>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
+          <Button onClick={save} disabled={busy} className="bg-brand-navy text-white">حفظ</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* -------- Course form -------- */
 function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(course?.title ?? "");
   const [description, setDescription] = useState(course?.description ?? "");
   const [audience, setAudience] = useState<"teachers" | "general">(course?.audience ?? "general");
   const [sessionType, setSessionType] = useState<"private" | "group">(course?.session_type ?? "group");
-  const [price, setPrice] = useState<string>(course?.price ? String(course.price) : "0");
-  const [slotsText, setSlotsText] = useState(
-    Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "",
-  );
+  const [hourlyRate, setHourlyRate] = useState<string>(String(course?.hourly_rate ?? "0"));
+  const [hoursPerWeek, setHoursPerWeek] = useState<string>(String(course?.hours_per_week ?? "0"));
+  const [startDate, setStartDate] = useState(course?.start_date ?? "");
+  const [endDate, setEndDate] = useState(course?.end_date ?? "");
+  const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open && !course) {
       setTitle(""); setDescription(""); setAudience("general"); setSessionType("group");
-      setPrice("0"); setSlotsText(""); setMeetingLink("");
+      setHourlyRate("0"); setHoursPerWeek("0"); setStartDate(""); setEndDate("");
+      setSlotsText(""); setMeetingLink("");
     }
   }, [open, course]);
+
+  const weeks = weeksBetween(startDate, endDate);
+  const hours = totalHours(weeks, Number(hoursPerWeek));
+  const totalPrice = hours * Number(hourlyRate);
 
   async function save() {
     if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
     const link = meetingLink.trim() || null;
-    if (link && !safeUrl(link)) { toast.error("رابط الاجتماع يجب أن يبدأ بـ https://"); return; }
+    if (link && !safeUrl(link)) { toast.error("رابط الاجتماع غير صالح"); return; }
     setBusy(true);
     const slots = slotsText.split("\n").map((s) => s.trim()).filter(Boolean);
     const payload = {
       title: title.trim(),
       description: description.trim(),
       audience, session_type: sessionType,
-      price: Number(price) || 0,
+      hourly_rate: Number(hourlyRate) || 0,
+      hours_per_week: Number(hoursPerWeek) || 0,
+      start_date: startDate || null,
+      end_date: endDate || null,
+      price: totalPrice,
       schedule_slots: slots,
     };
     let courseId = course?.id;
@@ -323,45 +669,28 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       courseId = ins.data?.id;
     }
     if (!error && courseId) {
-      const { error: mErr } = await supabase
-        .from("course_meetings")
-        .upsert({ course_id: courseId, meeting_link: link }, { onConflict: "course_id" });
+      const { error: mErr } = await supabase.from("course_meetings").upsert({ course_id: courseId, meeting_link: link }, { onConflict: "course_id" });
       error = mErr ?? error;
     }
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(course ? "تم التحديث" : "تمت الإضافة");
-    setOpen(false);
-    onSaved();
+    setOpen(false); onSaved();
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {course ? (
-          <Button size="sm" variant="outline">تعديل</Button>
-        ) : (
-          <button className="text-[11px] font-semibold uppercase tracking-wider text-brand-gold border-b border-brand-gold/30 pb-0.5">
-            + دورة جديدة
-          </button>
-        )}
+        {course ? <Button size="sm" variant="outline">تعديل</Button> :
+          <button className="text-[11px] font-semibold uppercase tracking-wider text-brand-gold border-b border-brand-gold/30 pb-0.5">+ دورة جديدة</button>}
       </DialogTrigger>
-      <DialogContent className="max-w-lg" dir="rtl">
-        <DialogHeader>
-          <DialogTitle className="font-serif text-2xl">{course ? "تعديل الدورة" : "دورة جديدة"}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-auto" dir="rtl">
+        <DialogHeader><DialogTitle className="font-serif text-2xl">{course ? "تعديل الدورة" : "دورة جديدة"}</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-2">
-            <Label>العنوان</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
-          </div>
-          <div className="space-y-2">
-            <Label>الوصف</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={2000} />
-          </div>
+          <div className="space-y-2"><Label>العنوان</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} /></div>
+          <div className="space-y-2"><Label>الوصف</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={2000} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>الفئة</Label>
+            <div className="space-y-2"><Label>الفئة</Label>
               <Select value={audience} onValueChange={(v) => setAudience(v as "teachers" | "general")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -370,8 +699,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>نوع الجلسة</Label>
+            <div className="space-y-2"><Label>نوع الجلسة</Label>
               <Select value={sessionType} onValueChange={(v) => setSessionType(v as "private" | "group")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -381,21 +709,23 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
               </Select>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>السعر (USD)</Label>
-            <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} dir="ltr" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} dir="ltr" /></div>
+            <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} dir="ltr" /></div>
           </div>
-          <div className="space-y-2">
-            <Label>المواعيد المتاحة (موعد في كل سطر)</Label>
-            <Textarea
-              value={slotsText}
-              onChange={(e) => setSlotsText(e.target.value)}
-              rows={4}
-              placeholder={"السبت 6 م\nالاثنين 8 م"}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>ساعات/أسبوع</Label><Input type="number" min="0" step="0.5" value={hoursPerWeek} onChange={(e) => setHoursPerWeek(e.target.value)} dir="ltr" /></div>
+            <div className="space-y-2"><Label>سعر الساعة (ر.ع.)</Label><Input type="number" min="0" step="0.001" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} dir="ltr" /></div>
           </div>
-          <div className="space-y-2">
-            <Label>رابط الاجتماع (Zoom / Meet / Teams)</Label>
+          <div className="bg-brand-sage/40 rounded-lg p-3 text-xs space-y-1">
+            <div className="flex justify-between"><span>عدد الأسابيع</span><span className="font-bold">{weeks}</span></div>
+            <div className="flex justify-between"><span>إجمالي الساعات</span><span className="font-bold">{hours}</span></div>
+            <div className="flex justify-between text-brand-navy"><span>الإجمالي</span><span className="font-serif text-base font-bold">{formatOmr(totalPrice)}</span></div>
+          </div>
+          <div className="space-y-2"><Label>المواعيد (موعد في كل سطر)</Label>
+            <Textarea value={slotsText} onChange={(e) => setSlotsText(e.target.value)} rows={3} placeholder={"السبت 6 م\nالاثنين 8 م"} />
+          </div>
+          <div className="space-y-2"><Label>رابط الاجتماع</Label>
             <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} dir="ltr" placeholder="https://" />
           </div>
         </div>
@@ -415,8 +745,7 @@ function DeleteCourseButton({ id, onDeleted }: { id: string; onDeleted: () => vo
     const { error } = await supabase.from("courses").delete().eq("id", id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("تم الحذف");
-    onDeleted();
+    toast.success("تم الحذف"); onDeleted();
   }
   return (
     <AlertDialog>
@@ -426,9 +755,7 @@ function DeleteCourseButton({ id, onDeleted }: { id: string; onDeleted: () => vo
       <AlertDialogContent dir="rtl">
         <AlertDialogHeader>
           <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-          <AlertDialogDescription>
-            سيتم حذف الدورة وجميع التسجيلات المرتبطة بها نهائيًا. هل أنت متأكد؟
-          </AlertDialogDescription>
+          <AlertDialogDescription>سيتم حذف الدورة وكل التسجيلات المرتبطة بها.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>إلغاء</AlertDialogCancel>
