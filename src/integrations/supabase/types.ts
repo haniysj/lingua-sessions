@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      course_materials: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          storage_path: string
+          title: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          storage_path: string
+          title: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          storage_path?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_materials_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       course_meetings: {
         Row: {
           course_id: string
@@ -45,33 +77,86 @@ export type Database = {
           audience: Database["public"]["Enums"]["course_audience"]
           created_at: string
           description: string
+          end_date: string | null
+          hourly_rate: number
+          hours_per_week: number
           id: string
           price: number
           schedule_slots: Json
           session_type: Database["public"]["Enums"]["course_session_type"]
+          start_date: string | null
           title: string
         }
         Insert: {
           audience?: Database["public"]["Enums"]["course_audience"]
           created_at?: string
           description?: string
+          end_date?: string | null
+          hourly_rate?: number
+          hours_per_week?: number
           id?: string
           price?: number
           schedule_slots?: Json
           session_type?: Database["public"]["Enums"]["course_session_type"]
+          start_date?: string | null
           title: string
         }
         Update: {
           audience?: Database["public"]["Enums"]["course_audience"]
           created_at?: string
           description?: string
+          end_date?: string | null
+          hourly_rate?: number
+          hours_per_week?: number
           id?: string
           price?: number
           schedule_slots?: Json
           session_type?: Database["public"]["Enums"]["course_session_type"]
+          start_date?: string | null
           title?: string
         }
         Relationships: []
+      }
+      homework_submissions: {
+        Row: {
+          course_id: string
+          created_at: string
+          feedback: string | null
+          grade: string | null
+          id: string
+          storage_path: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          feedback?: string | null
+          grade?: string | null
+          id?: string
+          storage_path: string
+          title?: string
+          user_id: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          feedback?: string | null
+          grade?: string | null
+          id?: string
+          storage_path?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homework_submissions_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -79,6 +164,8 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          level: string | null
+          level_notes: string | null
           phone: string | null
         }
         Insert: {
@@ -86,6 +173,8 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          level?: string | null
+          level_notes?: string | null
           phone?: string | null
         }
         Update: {
@@ -93,9 +182,116 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          level?: string | null
+          level_notes?: string | null
           phone?: string | null
         }
         Relationships: []
+      }
+      quiz_attempts: {
+        Row: {
+          answers: Json
+          created_at: string
+          id: string
+          quiz_id: string
+          score: number
+          total: number
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          quiz_id: string
+          score?: number
+          total?: number
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          quiz_id?: string
+          score?: number
+          total?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_attempts_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_questions: {
+        Row: {
+          choices: Json
+          correct_index: number
+          id: string
+          position: number
+          prompt: string
+          quiz_id: string
+        }
+        Insert: {
+          choices?: Json
+          correct_index?: number
+          id?: string
+          position?: number
+          prompt: string
+          quiz_id: string
+        }
+        Update: {
+          choices?: Json
+          correct_index?: number
+          id?: string
+          position?: number
+          prompt?: string
+          quiz_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_questions_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quizzes: {
+        Row: {
+          course_id: string | null
+          created_at: string
+          description: string
+          id: string
+          title: string
+        }
+        Insert: {
+          course_id?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          title: string
+        }
+        Update: {
+          course_id?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quizzes_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       registrations: {
         Row: {
@@ -132,6 +328,27 @@ export type Database = {
           },
         ]
       }
+      site_settings: {
+        Row: {
+          id: boolean
+          logo_url: string | null
+          site_name: string
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          logo_url?: string | null
+          site_name?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          logo_url?: string | null
+          site_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -155,6 +372,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_email_by_phone: { Args: { _phone: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
