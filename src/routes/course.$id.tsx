@@ -108,9 +108,14 @@ function CourseDetail() {
             )}
           </div>
 
-          <Button onClick={reserve} disabled={busy} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90 mt-2">
-            {busy ? "…" : "احجز مقعدك"}
-          </Button>
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <Button onClick={() => reserve(true)} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
+              {busy ? "…" : "احجز وادفع الآن"}
+            </Button>
+            <Button onClick={() => reserve(false)} disabled={busy} variant="outline" className="border-brand-navy/20 text-brand-navy">
+              الدفع لاحقاً
+            </Button>
+          </div>
         </article>
       </main>
     </div>
