@@ -22,9 +22,42 @@ export function totalHours(weeks: number, hoursPerWeek?: number | null): number 
   return weeks * Number(hoursPerWeek ?? 0);
 }
 
+const AR_MONTHS = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+];
+
+/** Display format: "05 يوليو 2026" with LTR isolation so day/year stay in order inside RTL text. */
 export function formatDateAr(d?: string | null): string {
   if (!d) return "—";
-  try {
-    return new Date(d).toLocaleDateString("ar-OM-u-nu-latn", { year: "numeric", month: "long", day: "numeric" });
-  } catch { return d; }
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return d;
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = AR_MONTHS[date.getMonth()];
+  const yyyy = date.getFullYear();
+  // \u2068 FSI ... \u2069 PDI keeps the sequence stable in RTL contexts
+  return `\u2068${dd} ${mm} ${yyyy}\u2069`;
+}
+
+/** Edit/input format: "dd/mm/yyyy" */
+export function formatDateDMY(d?: string | null): string {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "";
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/** Parse "dd/mm/yyyy" → "yyyy-mm-dd" (ISO date). Returns "" if invalid/incomplete. */
+export function parseDMYtoISO(s: string): string {
+  const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return "";
+  const dd = m[1].padStart(2, "0");
+  const mm = m[2].padStart(2, "0");
+  const yyyy = m[3];
+  const d = new Date(`${yyyy}-${mm}-${dd}`);
+  if (isNaN(d.getTime())) return "";
+  return `${yyyy}-${mm}-${dd}`;
 }

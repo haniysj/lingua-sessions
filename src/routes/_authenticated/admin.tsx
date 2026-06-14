@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { safeUrl } from "@/lib/safe-url";
-import { formatOmr, waLink, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
+import { formatOmr, waLink, weeksBetween, totalHours, formatDateAr, formatDateDMY, parseDMYtoISO } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -224,7 +224,7 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                 <p className="text-[11px] text-brand-navy/55">
                   {c.start_date && c.end_date ? (
                     <>
-                      {formatDateAr(c.start_date)} <span className="text-brand-gold font-bold mx-1">إلى</span> {formatDateAr(c.end_date)} · {weeks} أسبوع · {hours} ساعة
+                      <span className="text-brand-navy/70">من</span> <bdi>{formatDateAr(c.start_date)}</bdi> <span className="text-brand-gold font-bold mx-1">إلى</span> <bdi>{formatDateAr(c.end_date)}</bdi> · {weeks} أسبوع · {hours} ساعة
                     </>
                   ) : "بدون فترة محدّدة"}
                 </p>
@@ -646,8 +646,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
   const [sessionType, setSessionType] = useState<"private" | "group">(course?.session_type ?? "group");
   const [hourlyRate, setHourlyRate] = useState<string>(String(course?.hourly_rate ?? "0"));
   const [hoursPerWeek, setHoursPerWeek] = useState<string>(String(course?.hours_per_week ?? "0"));
-  const [startDate, setStartDate] = useState(course?.start_date ?? "");
-  const [endDate, setEndDate] = useState(course?.end_date ?? "");
+  const [startDate, setStartDate] = useState(course?.start_date ? formatDateDMY(course.start_date) : "");
+  const [endDate, setEndDate] = useState(course?.end_date ? formatDateDMY(course.end_date) : "");
   const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
   const [busy, setBusy] = useState(false);
@@ -660,7 +660,9 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     }
   }, [open, course]);
 
-  const weeks = weeksBetween(startDate, endDate);
+  const startISO = parseDMYtoISO(startDate);
+  const endISO = parseDMYtoISO(endDate);
+  const weeks = weeksBetween(startISO, endISO);
   const hours = totalHours(weeks, Number(hoursPerWeek));
   const totalPrice = hours * Number(hourlyRate);
 
@@ -676,8 +678,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       audience, session_type: sessionType,
       hourly_rate: Number(hourlyRate) || 0,
       hours_per_week: Number(hoursPerWeek) || 0,
-      start_date: startDate || null,
-      end_date: endDate || null,
+      start_date: startISO || null,
+      end_date: endISO || null,
       price: totalPrice,
       schedule_slots: slots,
     };
@@ -732,8 +734,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} dir="ltr" /></div>
-            <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} dir="ltr" /></div>
+            <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={startDate} onChange={(e) => setStartDate(e.target.value)} dir="ltr" /></div>
+            <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={endDate} onChange={(e) => setEndDate(e.target.value)} dir="ltr" /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>ساعات/أسبوع</Label><Input type="number" min="0" step="0.5" value={hoursPerWeek} onChange={(e) => setHoursPerWeek(e.target.value)} dir="ltr" /></div>
