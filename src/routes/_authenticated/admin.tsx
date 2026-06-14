@@ -132,15 +132,25 @@ function SettingsSection() {
 
   async function save() {
     if (!name.trim()) { toast.error("اسم المنصة مطلوب"); return; }
-    if (logo && !safeUrl(logo)) { toast.error("رابط الشعار يجب أن يبدأ بـ https://"); return; }
     setBusy(true);
     const { error } = await supabase.from("site_settings")
-      .upsert({ id: true, site_name: name.trim(), logo_url: logo.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      .upsert({ id: true, site_name: name.trim(), logo_url: logo || null, updated_at: new Date().toISOString() }, { onConflict: "id" });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم الحفظ");
     qc.invalidateQueries({ queryKey: ["site-settings"] });
     qc.invalidateQueries({ queryKey: ["site-settings-admin"] });
+  }
+
+  async function onPickLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("الرجاء اختيار ملف صورة"); return; }
+    if (file.size > 300 * 1024) { toast.error("حجم الشعار يجب ألا يتجاوز 300 كيلوبايت"); return; }
+    const reader = new FileReader();
+    reader.onload = () => setLogo(String(reader.result || ""));
+    reader.onerror = () => toast.error("تعذّر قراءة الملف");
+    reader.readAsDataURL(file);
   }
 
   if (isLoading) return <p className="text-sm text-brand-navy/50">…</p>;
@@ -152,11 +162,19 @@ function SettingsSection() {
         <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
       </div>
       <div className="space-y-2">
-        <Label>رابط شعار المنصة (URL)</Label>
-        <Input value={logo} onChange={(e) => setLogo(e.target.value)} dir="ltr" placeholder="https://..." />
-        {logo && safeUrl(logo) && (
-          <img src={logo} alt="معاينة" className="size-16 rounded-md object-cover bg-brand-sage/40 mt-2" />
-        )}
+        <Label>شعار المنصة</Label>
+        <div className="flex items-center gap-3">
+          {logo && (
+            <img src={logo} alt="معاينة الشعار" className="size-16 rounded-md object-cover bg-brand-sage/40 border border-brand-navy/10" />
+          )}
+          <div className="flex flex-col gap-2">
+            <Input type="file" accept="image/*" onChange={onPickLogo} className="text-xs" />
+            {logo && (
+              <button type="button" onClick={() => setLogo("")} className="text-[11px] text-brand-navy/50 hover:text-brand-navy text-start">إزالة الشعار</button>
+            )}
+          </div>
+        </div>
+        <p className="text-[11px] text-brand-navy/40">PNG / JPG / SVG · بحد أقصى ٣٠٠ كيلوبايت</p>
       </div>
       <Button onClick={save} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
         {busy ? "…" : "حفظ"}
