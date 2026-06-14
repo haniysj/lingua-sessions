@@ -646,8 +646,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
   const [sessionType, setSessionType] = useState<"private" | "group">(course?.session_type ?? "group");
   const [hourlyRate, setHourlyRate] = useState<string>(String(course?.hourly_rate ?? "0"));
   const [hoursPerWeek, setHoursPerWeek] = useState<string>(String(course?.hours_per_week ?? "0"));
-  const [startDate, setStartDate] = useState(course?.start_date ?? "");
-  const [endDate, setEndDate] = useState(course?.end_date ?? "");
+  const [startDate, setStartDate] = useState(course?.start_date ? formatDateDMY(course.start_date) : "");
+  const [endDate, setEndDate] = useState(course?.end_date ? formatDateDMY(course.end_date) : "");
   const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
   const [busy, setBusy] = useState(false);
@@ -660,7 +660,9 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     }
   }, [open, course]);
 
-  const weeks = weeksBetween(startDate, endDate);
+  const startISO = parseDMYtoISO(startDate);
+  const endISO = parseDMYtoISO(endDate);
+  const weeks = weeksBetween(startISO, endISO);
   const hours = totalHours(weeks, Number(hoursPerWeek));
   const totalPrice = hours * Number(hourlyRate);
 
