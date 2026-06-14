@@ -31,14 +31,23 @@ function CourseDetail() {
     },
   });
 
-  async function reserve() {
+  async function reserve(goToPayment: boolean) {
     if (!user) { navigate({ to: "/auth" }); return; }
     if (!course) return;
     setBusy(true);
-    const { error } = await supabase.from("registrations").insert({ user_id: user.id, course_id: course.id, slot: selectedSlot });
+    const { data, error } = await supabase
+      .from("registrations")
+      .insert({ user_id: user.id, course_id: course.id, slot: selectedSlot })
+      .select("id")
+      .single();
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    navigate({ to: "/reserved" });
+    toast.success("تم حجز مقعدك");
+    if (goToPayment && data?.id) {
+      navigate({ to: "/pay/$id", params: { id: data.id } });
+    } else {
+      navigate({ to: "/reserved" });
+    }
   }
 
   if (isLoading) return <div className="min-h-screen"><SiteHeader /><div className="p-8 text-center text-brand-navy/50">…</div></div>;
