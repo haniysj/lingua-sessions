@@ -25,6 +25,6 @@ export function totalHours(weeks: number, hoursPerWeek?: number | null): number 
 export function formatDateAr(d?: string | null): string {
   if (!d) return "—";
   try {
-    return new Date(d).toLocaleDateString("ar-OM", { year: "numeric", month: "long", day: "numeric" });
+    return new Date(d).toLocaleDateString("ar-OM-u-nu-latn", { year: "numeric", month: "long", day: "numeric" });
   } catch { return d; }
 }
