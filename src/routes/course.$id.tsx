@@ -31,14 +31,23 @@ function CourseDetail() {
     },
   });
 
-  async function reserve() {
+  async function reserve(goToPayment: boolean) {
     if (!user) { navigate({ to: "/auth" }); return; }
     if (!course) return;
     setBusy(true);
-    const { error } = await supabase.from("registrations").insert({ user_id: user.id, course_id: course.id, slot: selectedSlot });
+    const { data, error } = await supabase
+      .from("registrations")
+      .insert({ user_id: user.id, course_id: course.id, slot: selectedSlot })
+      .select("id")
+      .single();
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    navigate({ to: "/reserved" });
+    toast.success("تم حجز مقعدك");
+    if (goToPayment && data?.id) {
+      navigate({ to: "/pay/$id", params: { id: data.id } });
+    } else {
+      navigate({ to: "/reserved" });
+    }
   }
 
   if (isLoading) return <div className="min-h-screen"><SiteHeader /><div className="p-8 text-center text-brand-navy/50">…</div></div>;
@@ -99,9 +108,14 @@ function CourseDetail() {
             )}
           </div>
 
-          <Button onClick={reserve} disabled={busy} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90 mt-2">
-            {busy ? "…" : "احجز مقعدك"}
-          </Button>
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <Button onClick={() => reserve(true)} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
+              {busy ? "…" : "احجز وادفع الآن"}
+            </Button>
+            <Button onClick={() => reserve(false)} disabled={busy} variant="outline" className="border-brand-navy/20 text-brand-navy">
+              الدفع لاحقاً
+            </Button>
+          </div>
         </article>
       </main>
     </div>
