@@ -678,8 +678,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       audience, session_type: sessionType,
       hourly_rate: Number(hourlyRate) || 0,
       hours_per_week: Number(hoursPerWeek) || 0,
-      start_date: startDate || null,
-      end_date: endDate || null,
+      start_date: startISO || null,
+      end_date: endISO || null,
       price: totalPrice,
       schedule_slots: slots,
     };
