@@ -454,7 +454,7 @@ function HomeworkReview({ userId, courseTitle }: { userId: string; courseTitle: 
             <li key={h.id} className="border border-brand-navy/10 p-3 rounded-lg space-y-2">
               <div className="flex justify-between text-xs">
                 <button onClick={() => openFile(h.storage_path)} className="text-brand-gold underline">{h.title || "ملف"}</button>
-                <span className="text-brand-navy/40">{new Date(h.created_at).toLocaleDateString("ar")}</span>
+                <span className="text-brand-navy/40">{new Date(h.created_at).toLocaleDateString("ar-u-nu-latn")}</span>
               </div>
               <GradeForm id={h.id} initFeedback={h.feedback ?? ""} initGrade={h.grade ?? ""} onSave={grade} />
             </li>
