@@ -224,7 +224,7 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                 <p className="text-[11px] text-brand-navy/55">
                   {c.start_date && c.end_date ? (
                     <>
-                      {formatDateAr(c.start_date)} <span className="text-brand-gold font-bold mx-1">إلى</span> {formatDateAr(c.end_date)} · {weeks} أسبوع · {hours} ساعة
+                      <span className="text-brand-navy/70">من</span> <bdi>{formatDateAr(c.start_date)}</bdi> <span className="text-brand-gold font-bold mx-1">إلى</span> <bdi>{formatDateAr(c.end_date)}</bdi> · {weeks} أسبوع · {hours} ساعة
                     </>
                   ) : "بدون فترة محدّدة"}
                 </p>
