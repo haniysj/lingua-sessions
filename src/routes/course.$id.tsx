@@ -40,7 +40,11 @@ function CourseDetail() {
   async function reserve() {
     if (!course) return;
     if (!selectedSlot) { toast.error("اختر موعدًا"); return; }
-    const payload: Record<string, unknown> = { course_id: course.id, slot: selectedSlot };
+    const payload: {
+      course_id: string; slot: string;
+      user_id?: string;
+      guest_name?: string; guest_civil_id?: string; guest_phone?: string; guest_residence?: string;
+    } = { course_id: course.id, slot: selectedSlot };
     if (user) {
       payload.user_id = user.id;
     } else {
