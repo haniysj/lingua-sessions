@@ -325,16 +325,16 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     queryFn: async () => {
       const { data, error } = await supabase
         .from("registrations")
-        .select("id, user_id, payment_link, slot, created_at, courses(title, session_type)")
+        .select("id, user_id, payment_link, slot, created_at, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id)));
+      const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id).filter((id): id is string => !!id)));
       let profilesById = new Map<string, RegRow["profiles"]>();
       if (userIds.length) {
         const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone, level, level_notes").in("id", userIds);
         profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone, level: p.level, level_notes: p.level_notes }]));
       }
-      return (data ?? []).map((r) => ({ ...r, profiles: profilesById.get(r.user_id) ?? null })) as unknown as RegRow[];
+      return (data ?? []).map((r) => ({ ...r, profiles: r.user_id ? (profilesById.get(r.user_id) ?? null) : null })) as unknown as RegRow[];
     },
   });
 
@@ -342,9 +342,10 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     const q = search.trim().toLowerCase();
     if (!q) return regs.data ?? [];
     return (regs.data ?? []).filter((r) =>
-      (r.profiles?.full_name ?? "").toLowerCase().includes(q) ||
-      (r.profiles?.phone ?? "").toLowerCase().includes(q) ||
-      (r.profiles?.email ?? "").toLowerCase().includes(q) ||
+      ((r.profiles?.full_name ?? r.guest_name ?? "")).toLowerCase().includes(q) ||
+      ((r.profiles?.phone ?? r.guest_phone ?? "")).toLowerCase().includes(q) ||
+      ((r.profiles?.email ?? "")).toLowerCase().includes(q) ||
+      ((r.guest_civil_id ?? "")).toLowerCase().includes(q) ||
       (r.courses?.title ?? "").toLowerCase().includes(q),
     );
   }, [regs.data, search]);
