@@ -129,17 +129,31 @@ function SettingsSection() {
   });
   const [name, setName] = useState("");
   const [logo, setLogo] = useState("");
+  const [bankInfo, setBankInfo] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (data) { setName(data.site_name ?? ""); setLogo(data.logo_url ?? ""); }
+    if (data) {
+      setName(data.site_name ?? "");
+      setLogo(data.logo_url ?? "");
+      setBankInfo(data.bank_info ?? "");
+      setWhatsapp(data.whatsapp_number ?? "");
+    }
   }, [data]);
 
   async function save() {
     if (!name.trim()) { toast.error("اسم المنصة مطلوب"); return; }
     setBusy(true);
     const { error } = await supabase.from("site_settings")
-      .upsert({ id: true, site_name: name.trim(), logo_url: logo || null, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      .upsert({
+        id: true,
+        site_name: name.trim(),
+        logo_url: logo || null,
+        bank_info: bankInfo.trim() || null,
+        whatsapp_number: whatsapp.trim() || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم الحفظ");
@@ -180,6 +194,15 @@ function SettingsSection() {
           </div>
         </div>
         <p className="text-[11px] text-brand-navy/40">PNG / JPG / SVG · بحد أقصى ٣٠٠ كيلوبايت</p>
+      </div>
+      <div className="space-y-2">
+        <Label>بيانات الحساب البنكي</Label>
+        <Textarea value={bankInfo} onChange={(e) => setBankInfo(e.target.value)} rows={4} maxLength={1000} placeholder="اسم البنك&#10;اسم صاحب الحساب&#10;رقم الحساب / IBAN" />
+        <p className="text-[11px] text-brand-navy/40">تظهر للمنتسب في صفحة الدفع.</p>
+      </div>
+      <div className="space-y-2">
+        <Label>رقم واتساب المنصة (لاستلام الإيصالات)</Label>
+        <Input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} dir="ltr" placeholder="+96812345678" maxLength={20} />
       </div>
       <Button onClick={save} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
         {busy ? "…" : "حفظ"}
