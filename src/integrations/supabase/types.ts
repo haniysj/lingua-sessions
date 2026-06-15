@@ -297,26 +297,38 @@ export type Database = {
         Row: {
           course_id: string
           created_at: string
+          guest_civil_id: string | null
+          guest_name: string | null
+          guest_phone: string | null
+          guest_residence: string | null
           id: string
           payment_link: string | null
           slot: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           course_id: string
           created_at?: string
+          guest_civil_id?: string | null
+          guest_name?: string | null
+          guest_phone?: string | null
+          guest_residence?: string | null
           id?: string
           payment_link?: string | null
           slot?: string | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           course_id?: string
           created_at?: string
+          guest_civil_id?: string | null
+          guest_name?: string | null
+          guest_phone?: string | null
+          guest_residence?: string | null
           id?: string
           payment_link?: string | null
           slot?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -330,22 +342,28 @@ export type Database = {
       }
       site_settings: {
         Row: {
+          bank_info: string | null
           id: boolean
           logo_url: string | null
           site_name: string
           updated_at: string
+          whatsapp_number: string | null
         }
         Insert: {
+          bank_info?: string | null
           id?: boolean
           logo_url?: string | null
           site_name?: string
           updated_at?: string
+          whatsapp_number?: string | null
         }
         Update: {
+          bank_info?: string | null
           id?: boolean
           logo_url?: string | null
           site_name?: string
           updated_at?: string
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
