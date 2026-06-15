@@ -55,10 +55,14 @@ type Course = {
 
 type RegRow = {
   id: string;
-  user_id: string;
+  user_id: string | null;
   payment_link: string | null;
   slot: string | null;
   created_at: string;
+  guest_name: string | null;
+  guest_civil_id: string | null;
+  guest_phone: string | null;
+  guest_residence: string | null;
   courses: { title: string; session_type: string } | null;
   profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
@@ -125,17 +129,31 @@ function SettingsSection() {
   });
   const [name, setName] = useState("");
   const [logo, setLogo] = useState("");
+  const [bankInfo, setBankInfo] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (data) { setName(data.site_name ?? ""); setLogo(data.logo_url ?? ""); }
+    if (data) {
+      setName(data.site_name ?? "");
+      setLogo(data.logo_url ?? "");
+      setBankInfo(data.bank_info ?? "");
+      setWhatsapp(data.whatsapp_number ?? "");
+    }
   }, [data]);
 
   async function save() {
     if (!name.trim()) { toast.error("اسم المنصة مطلوب"); return; }
     setBusy(true);
     const { error } = await supabase.from("site_settings")
-      .upsert({ id: true, site_name: name.trim(), logo_url: logo || null, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      .upsert({
+        id: true,
+        site_name: name.trim(),
+        logo_url: logo || null,
+        bank_info: bankInfo.trim() || null,
+        whatsapp_number: whatsapp.trim() || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم الحفظ");
@@ -176,6 +194,15 @@ function SettingsSection() {
           </div>
         </div>
         <p className="text-[11px] text-brand-navy/40">PNG / JPG / SVG · بحد أقصى ٣٠٠ كيلوبايت</p>
+      </div>
+      <div className="space-y-2">
+        <Label>بيانات الحساب البنكي</Label>
+        <Textarea value={bankInfo} onChange={(e) => setBankInfo(e.target.value)} rows={4} maxLength={1000} placeholder="اسم البنك&#10;اسم صاحب الحساب&#10;رقم الحساب / IBAN" />
+        <p className="text-[11px] text-brand-navy/40">تظهر للمنتسب في صفحة الدفع.</p>
+      </div>
+      <div className="space-y-2">
+        <Label>رقم واتساب المنصة (لاستلام الإيصالات)</Label>
+        <Input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} dir="ltr" placeholder="+96812345678" maxLength={20} />
       </div>
       <Button onClick={save} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
         {busy ? "…" : "حفظ"}
@@ -321,16 +348,16 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     queryFn: async () => {
       const { data, error } = await supabase
         .from("registrations")
-        .select("id, user_id, payment_link, slot, created_at, courses(title, session_type)")
+        .select("id, user_id, payment_link, slot, created_at, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id)));
+      const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id).filter((id): id is string => !!id)));
       let profilesById = new Map<string, RegRow["profiles"]>();
       if (userIds.length) {
         const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone, level, level_notes").in("id", userIds);
         profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone, level: p.level, level_notes: p.level_notes }]));
       }
-      return (data ?? []).map((r) => ({ ...r, profiles: profilesById.get(r.user_id) ?? null })) as unknown as RegRow[];
+      return (data ?? []).map((r) => ({ ...r, profiles: r.user_id ? (profilesById.get(r.user_id) ?? null) : null })) as unknown as RegRow[];
     },
   });
 
@@ -338,9 +365,10 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     const q = search.trim().toLowerCase();
     if (!q) return regs.data ?? [];
     return (regs.data ?? []).filter((r) =>
-      (r.profiles?.full_name ?? "").toLowerCase().includes(q) ||
-      (r.profiles?.phone ?? "").toLowerCase().includes(q) ||
-      (r.profiles?.email ?? "").toLowerCase().includes(q) ||
+      ((r.profiles?.full_name ?? r.guest_name ?? "")).toLowerCase().includes(q) ||
+      ((r.profiles?.phone ?? r.guest_phone ?? "")).toLowerCase().includes(q) ||
+      ((r.profiles?.email ?? "")).toLowerCase().includes(q) ||
+      ((r.guest_civil_id ?? "")).toLowerCase().includes(q) ||
       (r.courses?.title ?? "").toLowerCase().includes(q),
     );
   }, [regs.data, search]);
@@ -348,21 +376,60 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
   return (
     <section className="space-y-4">
       <div className="flex justify-between items-end gap-3">
-        <h2 className="font-serif text-2xl">التسجيلات</h2>
-        <Input placeholder="بحث" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+        <h2 className="font-serif text-2xl">المنتسبون</h2>
+        <Input placeholder="بحث بالاسم أو الهاتف أو الرقم المدني" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
       </div>
-      <div className="bg-white border border-brand-navy/5 rounded-xl divide-y divide-brand-navy/5">
+      <div className="bg-white border border-brand-navy/5 rounded-xl overflow-x-auto">
         {filtered.length === 0 ? (
           <p className="p-6 text-center text-xs text-brand-navy/40">لا توجد تسجيلات.</p>
-        ) : filtered.map((r) => (
-          <RegistrationRow key={r.id} reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
-        ))}
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="bg-brand-sage/40 text-brand-navy/70">
+              <tr>
+                <th className="text-start p-3">الاسم</th>
+                <th className="text-start p-3">الرقم المدني</th>
+                <th className="text-start p-3">الهاتف</th>
+                <th className="text-start p-3">مكان السكن</th>
+                <th className="text-start p-3">الدورة</th>
+                <th className="text-start p-3">الموعد</th>
+                <th className="text-start p-3">التاريخ</th>
+                <th className="text-start p-3">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-brand-navy/5">
+              {filtered.map((r) => {
+                const name = r.profiles?.full_name ?? r.guest_name ?? "—";
+                const phone = r.profiles?.phone ?? r.guest_phone ?? "—";
+                const email = r.profiles?.email ?? "";
+                return (
+                  <tr key={r.id} className="hover:bg-brand-sage/20">
+                    <td className="p-3">
+                      <p className="font-medium">{name}</p>
+                      {email && <p className="text-[10px] text-brand-navy/50" dir="ltr">{email}</p>}
+                      {r.user_id === null && <span className="text-[9px] bg-brand-blush text-brand-navy/70 px-1.5 py-0.5 rounded-full">زائر</span>}
+                    </td>
+                    <td className="p-3" dir="ltr">{r.guest_civil_id ?? "—"}</td>
+                    <td className="p-3" dir="ltr">{phone}</td>
+                    <td className="p-3">{r.guest_residence ?? "—"}</td>
+                    <td className="p-3">{r.courses?.title ?? "—"}</td>
+                    <td className="p-3">{r.slot ?? "—"}</td>
+                    <td className="p-3 text-brand-navy/50">{formatDateAr(r.created_at)}</td>
+                    <td className="p-3">
+                      <RegistrationActions reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </section>
   );
 }
 
-function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
+function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
   const [link, setLink] = useState(reg.payment_link ?? "");
   const [level, setLevel] = useState(reg.profiles?.level ?? "");
   const [levelNotes, setLevelNotes] = useState(reg.profiles?.level_notes ?? "");
@@ -379,64 +446,66 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
   }
 
   async function saveLevel() {
+    if (!reg.user_id) return;
     setBusy(true);
     const { error } = await supabase.from("profiles").update({ level: level || null, level_notes: levelNotes || null }).eq("id", reg.user_id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("تم تحديث المستوى"); onSaved();
+    toast.success("تم التحديث"); onSaved();
   }
 
-  function sendEmail() {
-    if (!link) { toast.error("أضف الرابط أولاً"); return; }
-    const subject = encodeURIComponent(`رابط الدفع — ${reg.courses?.title ?? "دورتك"}`);
-    const body = encodeURIComponent(`أهلاً ${reg.profiles?.full_name ?? ""}\n\nرابط الدفع: ${link}`);
-    window.location.href = `mailto:${reg.profiles?.email ?? ""}?subject=${subject}&body=${body}`;
-  }
   function sendWhatsApp() {
-    if (!link) { toast.error("أضف الرابط أولاً"); return; }
-    const msg = `أهلاً ${reg.profiles?.full_name ?? ""} 👋\nتفاصيل حجزك في *${reg.courses?.title ?? "دورتك"}*\nرابط الدفع: ${link}`;
-    const url = waLink(reg.profiles?.phone, msg);
+    const phone = reg.profiles?.phone ?? reg.guest_phone;
+    const msg = `أهلاً ${reg.profiles?.full_name ?? reg.guest_name ?? ""} 👋\nبخصوص حجزك في *${reg.courses?.title ?? "دورتك"}*`;
+    const url = waLink(phone, msg);
     if (!url) { toast.error("لا يوجد هاتف"); return; }
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function del() {
+    if (!confirm("حذف التسجيل؟")) return;
+    const { error } = await supabase.from("registrations").delete().eq("id", reg.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("تم الحذف"); onSaved();
+  }
+
   return (
-    <div className="p-4 space-y-3">
-      <div className="flex flex-col md:flex-row md:items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold">{reg.profiles?.full_name || "—"}
-            {reg.profiles?.level && <span className="ms-2 text-[10px] bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded-full">{reg.profiles.level}</span>}
-          </p>
-          <p className="text-[11px] text-brand-navy/50" dir="ltr">{reg.profiles?.email ?? ""}</p>
-          {reg.profiles?.phone && <p className="text-[11px] text-brand-navy/50" dir="ltr">📱 {reg.profiles.phone}</p>}
-          <p className="text-[11px] text-brand-navy/60 mt-1">{reg.courses?.title ?? "دورة"} · {reg.slot ?? "—"}</p>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button size="sm" variant="outline" className="h-7 text-[10px]">إدارة</Button></DialogTrigger>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader><DialogTitle>{reg.profiles?.full_name ?? reg.guest_name ?? "—"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">رابط الدفع (اختياري)</Label>
+            <div className="flex gap-2">
+              <Input value={link} onChange={(e) => setLink(e.target.value)} dir="ltr" className="text-xs" />
+              <Button size="sm" variant="outline" onClick={saveLink} disabled={busy}>حفظ</Button>
+            </div>
+          </div>
+          {reg.user_id && (
+            <div className="bg-brand-sage/30 p-3 rounded-lg space-y-2">
+              <Label className="text-xs">مستوى الطالب</Label>
+              <Select value={level || "none"} onValueChange={(v) => setLevel(v === "none" ? "" : v)}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Input value={levelNotes} onChange={(e) => setLevelNotes(e.target.value)} placeholder="ملاحظات" className="h-8 text-xs" />
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={saveLevel} disabled={busy}>تحديث المستوى</Button>
+                <HomeworkReview userId={reg.user_id} courseTitle={reg.courses?.title ?? ""} />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-between pt-2">
+            <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬 واتساب</Button>
+            <Button size="sm" variant="outline" className="text-red-600" onClick={del}>حذف</Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <Input placeholder="رابط الدفع" value={link} onChange={(e) => setLink(e.target.value)} className="w-56 text-xs" dir="ltr" />
-          <Button size="sm" variant="outline" onClick={saveLink} disabled={busy}>حفظ</Button>
-          <Button size="sm" onClick={sendEmail} className="bg-brand-navy text-white hover:bg-brand-navy/90">📧</Button>
-          <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬</Button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2 items-end bg-brand-sage/30 p-3 rounded-lg">
-        <div>
-          <Label className="text-[10px]">مستوى الطالب</Label>
-          <Select value={level || "none"} onValueChange={(v) => setLevel(v === "none" ? "" : v)}>
-            <SelectTrigger className="w-24 h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">—</SelectItem>
-              {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex-1 min-w-32">
-          <Label className="text-[10px]">ملاحظات تقدّم</Label>
-          <Input value={levelNotes} onChange={(e) => setLevelNotes(e.target.value)} className="h-8 text-xs" />
-        </div>
-        <Button size="sm" variant="outline" onClick={saveLevel} disabled={busy}>تحديث المستوى</Button>
-        <HomeworkReview userId={reg.user_id} courseTitle={reg.courses?.title ?? ""} />
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
