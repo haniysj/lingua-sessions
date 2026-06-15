@@ -4,6 +4,8 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { formatOmr, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
@@ -21,6 +23,10 @@ function CourseDetail() {
   const navigate = useNavigate();
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [civilId, setCivilId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [residence, setResidence] = useState("");
 
   const { data: course, isLoading } = useQuery({
     queryKey: ["course", id],
@@ -31,23 +37,27 @@ function CourseDetail() {
     },
   });
 
-  async function reserve(goToPayment: boolean) {
-    if (!user) { navigate({ to: "/auth" }); return; }
+  async function reserve() {
     if (!course) return;
+    if (!selectedSlot) { toast.error("اختر موعدًا"); return; }
+    const payload: Record<string, unknown> = { course_id: course.id, slot: selectedSlot };
+    if (user) {
+      payload.user_id = user.id;
+    } else {
+      if (!name.trim() || !civilId.trim() || !phone.trim() || !residence.trim()) {
+        toast.error("الرجاء تعبئة جميع البيانات"); return;
+      }
+      payload.guest_name = name.trim();
+      payload.guest_civil_id = civilId.trim();
+      payload.guest_phone = phone.trim();
+      payload.guest_residence = residence.trim();
+    }
     setBusy(true);
-    const { data, error } = await supabase
-      .from("registrations")
-      .insert({ user_id: user.id, course_id: course.id, slot: selectedSlot })
-      .select("id")
-      .single();
+    const { data, error } = await supabase.from("registrations").insert(payload).select("id").single();
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم حجز مقعدك");
-    if (goToPayment && data?.id) {
-      navigate({ to: "/pay/$id", params: { id: data.id } });
-    } else {
-      navigate({ to: "/reserved" });
-    }
+    navigate({ to: "/pay/$id", params: { id: data.id } });
   }
 
   if (isLoading) return <div className="min-h-screen"><SiteHeader /><div className="p-8 text-center text-brand-navy/50">…</div></div>;
@@ -108,12 +118,34 @@ function CourseDetail() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2">
-            <Button onClick={() => reserve(true)} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">
-              {busy ? "…" : "احجز وادفع الآن"}
-            </Button>
-            <Button onClick={() => reserve(false)} disabled={busy} variant="outline" className="border-brand-navy/20 text-brand-navy">
-              الدفع لاحقاً
+          {!user && selectedSlot && (
+            <div className="pt-2 space-y-3 border-t border-brand-navy/10 pt-4">
+              <h2 className="font-serif text-lg">بيانات المنتسب</h2>
+              <div className="space-y-2">
+                <Label className="text-xs">الاسم الثلاثي</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">الرقم المدني</Label>
+                  <Input value={civilId} onChange={(e) => setCivilId(e.target.value)} maxLength={20} dir="ltr" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">رقم الهاتف</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} dir="ltr" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">مكان السكن</Label>
+                <Input value={residence} onChange={(e) => setResidence(e.target.value)} maxLength={150} />
+              </div>
+              <p className="text-[11px] text-brand-navy/50">يمكنك أيضًا <Link to="/auth" className="text-brand-gold underline">تسجيل الدخول</Link> إن كان لديك حساب.</p>
+            </div>
+          )}
+
+          <div className="pt-2">
+            <Button onClick={reserve} disabled={busy || !selectedSlot} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90">
+              {busy ? "…" : "احجز وانتقل للدفع"}
             </Button>
           </div>
         </article>
