@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { DateField } from "@/components/DateField";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
@@ -734,8 +735,8 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={startDate} onChange={(e) => setStartDate(e.target.value)} dir="ltr" /></div>
-            <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={endDate} onChange={(e) => setEndDate(e.target.value)} dir="ltr" /></div>
+            <div className="space-y-2"><Label>تاريخ البداية</Label><DateField value={startDate} onChange={setStartDate} /></div>
+            <div className="space-y-2"><Label>تاريخ النهاية</Label><DateField value={endDate} onChange={setEndDate} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>ساعات/أسبوع</Label><Input type="number" min="0" step="0.5" value={hoursPerWeek} onChange={(e) => setHoursPerWeek(e.target.value)} dir="ltr" /></div>
