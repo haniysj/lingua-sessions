@@ -55,10 +55,14 @@ type Course = {
 
 type RegRow = {
   id: string;
-  user_id: string;
+  user_id: string | null;
   payment_link: string | null;
   slot: string | null;
   created_at: string;
+  guest_name: string | null;
+  guest_civil_id: string | null;
+  guest_phone: string | null;
+  guest_residence: string | null;
   courses: { title: string; session_type: string } | null;
   profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
