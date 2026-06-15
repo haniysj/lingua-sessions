@@ -61,7 +61,7 @@ function CourseDetail() {
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم حجز مقعدك");
-    navigate({ to: "/pay/$id", params: { id: data.id } });
+    navigate({ to: "/pay/$id", params: { id: course.id } });
   }
 
   if (isLoading) return <div className="min-h-screen"><SiteHeader /><div className="p-8 text-center text-brand-navy/50">…</div></div>;
