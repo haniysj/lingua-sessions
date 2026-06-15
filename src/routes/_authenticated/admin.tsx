@@ -353,21 +353,60 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
   return (
     <section className="space-y-4">
       <div className="flex justify-between items-end gap-3">
-        <h2 className="font-serif text-2xl">التسجيلات</h2>
-        <Input placeholder="بحث" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+        <h2 className="font-serif text-2xl">المنتسبون</h2>
+        <Input placeholder="بحث بالاسم أو الهاتف أو الرقم المدني" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
       </div>
-      <div className="bg-white border border-brand-navy/5 rounded-xl divide-y divide-brand-navy/5">
+      <div className="bg-white border border-brand-navy/5 rounded-xl overflow-x-auto">
         {filtered.length === 0 ? (
           <p className="p-6 text-center text-xs text-brand-navy/40">لا توجد تسجيلات.</p>
-        ) : filtered.map((r) => (
-          <RegistrationRow key={r.id} reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
-        ))}
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="bg-brand-sage/40 text-brand-navy/70">
+              <tr>
+                <th className="text-start p-3">الاسم</th>
+                <th className="text-start p-3">الرقم المدني</th>
+                <th className="text-start p-3">الهاتف</th>
+                <th className="text-start p-3">مكان السكن</th>
+                <th className="text-start p-3">الدورة</th>
+                <th className="text-start p-3">الموعد</th>
+                <th className="text-start p-3">التاريخ</th>
+                <th className="text-start p-3">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-brand-navy/5">
+              {filtered.map((r) => {
+                const name = r.profiles?.full_name ?? r.guest_name ?? "—";
+                const phone = r.profiles?.phone ?? r.guest_phone ?? "—";
+                const email = r.profiles?.email ?? "";
+                return (
+                  <tr key={r.id} className="hover:bg-brand-sage/20">
+                    <td className="p-3">
+                      <p className="font-medium">{name}</p>
+                      {email && <p className="text-[10px] text-brand-navy/50" dir="ltr">{email}</p>}
+                      {r.user_id === null && <span className="text-[9px] bg-brand-blush text-brand-navy/70 px-1.5 py-0.5 rounded-full">زائر</span>}
+                    </td>
+                    <td className="p-3" dir="ltr">{r.guest_civil_id ?? "—"}</td>
+                    <td className="p-3" dir="ltr">{phone}</td>
+                    <td className="p-3">{r.guest_residence ?? "—"}</td>
+                    <td className="p-3">{r.courses?.title ?? "—"}</td>
+                    <td className="p-3">{r.slot ?? "—"}</td>
+                    <td className="p-3 text-brand-navy/50">{formatDateAr(r.created_at)}</td>
+                    <td className="p-3">
+                      <RegistrationActions reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </section>
   );
 }
 
-function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
+function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
   const [link, setLink] = useState(reg.payment_link ?? "");
   const [level, setLevel] = useState(reg.profiles?.level ?? "");
   const [levelNotes, setLevelNotes] = useState(reg.profiles?.level_notes ?? "");
@@ -384,64 +423,66 @@ function RegistrationRow({ reg, onSaved }: { reg: RegRow; onSaved: () => void })
   }
 
   async function saveLevel() {
+    if (!reg.user_id) return;
     setBusy(true);
     const { error } = await supabase.from("profiles").update({ level: level || null, level_notes: levelNotes || null }).eq("id", reg.user_id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("تم تحديث المستوى"); onSaved();
+    toast.success("تم التحديث"); onSaved();
   }
 
-  function sendEmail() {
-    if (!link) { toast.error("أضف الرابط أولاً"); return; }
-    const subject = encodeURIComponent(`رابط الدفع — ${reg.courses?.title ?? "دورتك"}`);
-    const body = encodeURIComponent(`أهلاً ${reg.profiles?.full_name ?? ""}\n\nرابط الدفع: ${link}`);
-    window.location.href = `mailto:${reg.profiles?.email ?? ""}?subject=${subject}&body=${body}`;
-  }
   function sendWhatsApp() {
-    if (!link) { toast.error("أضف الرابط أولاً"); return; }
-    const msg = `أهلاً ${reg.profiles?.full_name ?? ""} 👋\nتفاصيل حجزك في *${reg.courses?.title ?? "دورتك"}*\nرابط الدفع: ${link}`;
-    const url = waLink(reg.profiles?.phone, msg);
+    const phone = reg.profiles?.phone ?? reg.guest_phone;
+    const msg = `أهلاً ${reg.profiles?.full_name ?? reg.guest_name ?? ""} 👋\nبخصوص حجزك في *${reg.courses?.title ?? "دورتك"}*`;
+    const url = waLink(phone, msg);
     if (!url) { toast.error("لا يوجد هاتف"); return; }
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function del() {
+    if (!confirm("حذف التسجيل؟")) return;
+    const { error } = await supabase.from("registrations").delete().eq("id", reg.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("تم الحذف"); onSaved();
+  }
+
   return (
-    <div className="p-4 space-y-3">
-      <div className="flex flex-col md:flex-row md:items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold">{reg.profiles?.full_name || "—"}
-            {reg.profiles?.level && <span className="ms-2 text-[10px] bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded-full">{reg.profiles.level}</span>}
-          </p>
-          <p className="text-[11px] text-brand-navy/50" dir="ltr">{reg.profiles?.email ?? ""}</p>
-          {reg.profiles?.phone && <p className="text-[11px] text-brand-navy/50" dir="ltr">📱 {reg.profiles.phone}</p>}
-          <p className="text-[11px] text-brand-navy/60 mt-1">{reg.courses?.title ?? "دورة"} · {reg.slot ?? "—"}</p>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button size="sm" variant="outline" className="h-7 text-[10px]">إدارة</Button></DialogTrigger>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader><DialogTitle>{reg.profiles?.full_name ?? reg.guest_name ?? "—"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">رابط الدفع (اختياري)</Label>
+            <div className="flex gap-2">
+              <Input value={link} onChange={(e) => setLink(e.target.value)} dir="ltr" className="text-xs" />
+              <Button size="sm" variant="outline" onClick={saveLink} disabled={busy}>حفظ</Button>
+            </div>
+          </div>
+          {reg.user_id && (
+            <div className="bg-brand-sage/30 p-3 rounded-lg space-y-2">
+              <Label className="text-xs">مستوى الطالب</Label>
+              <Select value={level || "none"} onValueChange={(v) => setLevel(v === "none" ? "" : v)}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Input value={levelNotes} onChange={(e) => setLevelNotes(e.target.value)} placeholder="ملاحظات" className="h-8 text-xs" />
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={saveLevel} disabled={busy}>تحديث المستوى</Button>
+                <HomeworkReview userId={reg.user_id} courseTitle={reg.courses?.title ?? ""} />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-between pt-2">
+            <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬 واتساب</Button>
+            <Button size="sm" variant="outline" className="text-red-600" onClick={del}>حذف</Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <Input placeholder="رابط الدفع" value={link} onChange={(e) => setLink(e.target.value)} className="w-56 text-xs" dir="ltr" />
-          <Button size="sm" variant="outline" onClick={saveLink} disabled={busy}>حفظ</Button>
-          <Button size="sm" onClick={sendEmail} className="bg-brand-navy text-white hover:bg-brand-navy/90">📧</Button>
-          <Button size="sm" onClick={sendWhatsApp} className="bg-emerald-600 text-white hover:bg-emerald-700">💬</Button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2 items-end bg-brand-sage/30 p-3 rounded-lg">
-        <div>
-          <Label className="text-[10px]">مستوى الطالب</Label>
-          <Select value={level || "none"} onValueChange={(v) => setLevel(v === "none" ? "" : v)}>
-            <SelectTrigger className="w-24 h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">—</SelectItem>
-              {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex-1 min-w-32">
-          <Label className="text-[10px]">ملاحظات تقدّم</Label>
-          <Input value={levelNotes} onChange={(e) => setLevelNotes(e.target.value)} className="h-8 text-xs" />
-        </div>
-        <Button size="sm" variant="outline" onClick={saveLevel} disabled={busy}>تحديث المستوى</Button>
-        <HomeworkReview userId={reg.user_id} courseTitle={reg.courses?.title ?? ""} />
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
