@@ -57,7 +57,7 @@ function CourseDetail() {
       payload.guest_residence = residence.trim();
     }
     setBusy(true);
-    const { error } = await supabase.from("registrations").insert(payload).select("id").single();
+    const { error } = await supabase.from("registrations").insert(payload);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم حجز مقعدك");
