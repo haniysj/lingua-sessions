@@ -51,6 +51,7 @@ type Course = {
   end_date: string | null;
   schedule_slots: string[] | unknown;
   meeting_link: string | null;
+  seats_total: number;
 };
 
 type RegRow = {
@@ -58,12 +59,14 @@ type RegRow = {
   user_id: string | null;
   payment_link: string | null;
   slot: string | null;
+  status: string;
   created_at: string;
+  course_id: string;
   guest_name: string | null;
   guest_civil_id: string | null;
   guest_phone: string | null;
   guest_residence: string | null;
-  courses: { title: string; session_type: string } | null;
+  courses: { title: string; session_type: string; seats_total: number } | null;
   profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
 
@@ -247,6 +250,9 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                   <span className="bg-brand-sage text-brand-navy text-[9px] font-bold px-2 py-0.5 rounded-full">{AUDIENCE_LABEL[c.audience]}</span>
                   <span className="text-[10px] text-brand-navy/50">{SESSION_LABEL[c.session_type]}</span>
                   <span className="text-brand-gold text-xs font-bold">{formatOmr(total || c.price)}</span>
+                  {Number(c.seats_total) > 0 && (
+                    <span className="text-[10px] bg-brand-blush text-brand-navy/70 px-2 py-0.5 rounded-full">🎟️ {c.seats_total} مقعد</span>
+                  )}
                 </div>
                 <h3 className="font-medium">{c.title}</h3>
                 <p className="text-[11px] text-brand-navy/55">
@@ -348,7 +354,7 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     queryFn: async () => {
       const { data, error } = await supabase
         .from("registrations")
-        .select("id, user_id, payment_link, slot, created_at, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type)")
+        .select("id, user_id, payment_link, slot, status, created_at, course_id, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type, seats_total)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id).filter((id): id is string => !!id)));
@@ -373,59 +379,109 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     );
   }, [regs.data, search]);
 
+  // Group registrations by course
+  const grouped = useMemo(() => {
+    const map = new Map<string, { title: string; seatsTotal: number; rows: RegRow[] }>();
+    filtered.forEach((r) => {
+      const key = r.course_id ?? "—";
+      if (!map.has(key)) {
+        map.set(key, {
+          title: r.courses?.title ?? "بدون دورة",
+          seatsTotal: Number(r.courses?.seats_total ?? 0),
+          rows: [],
+        });
+      }
+      map.get(key)!.rows.push(r);
+    });
+    return Array.from(map.entries()).map(([course_id, v]) => ({ course_id, ...v }));
+  }, [filtered]);
+
   return (
     <section className="space-y-4">
       <div className="flex justify-between items-end gap-3">
         <h2 className="font-serif text-2xl">المنتسبون</h2>
         <Input placeholder="بحث بالاسم أو الهاتف أو الرقم المدني" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
       </div>
-      <div className="bg-white border border-brand-navy/5 rounded-xl overflow-x-auto">
-        {filtered.length === 0 ? (
-          <p className="p-6 text-center text-xs text-brand-navy/40">لا توجد تسجيلات.</p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="bg-brand-sage/40 text-brand-navy/70">
-              <tr>
-                <th className="text-start p-3">الاسم</th>
-                <th className="text-start p-3">الرقم المدني</th>
-                <th className="text-start p-3">الهاتف</th>
-                <th className="text-start p-3">مكان السكن</th>
-                <th className="text-start p-3">الدورة</th>
-                <th className="text-start p-3">الموعد</th>
-                <th className="text-start p-3">التاريخ</th>
-                <th className="text-start p-3">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-navy/5">
-              {filtered.map((r) => {
-                const name = r.profiles?.full_name ?? r.guest_name ?? "—";
-                const phone = r.profiles?.phone ?? r.guest_phone ?? "—";
-                const email = r.profiles?.email ?? "";
-                return (
-                  <tr key={r.id} className="hover:bg-brand-sage/20">
-                    <td className="p-3">
-                      <p className="font-medium">{name}</p>
-                      {email && <p className="text-[10px] text-brand-navy/50" dir="ltr">{email}</p>}
-                      {r.user_id === null && <span className="text-[9px] bg-brand-blush text-brand-navy/70 px-1.5 py-0.5 rounded-full">زائر</span>}
-                    </td>
-                    <td className="p-3" dir="ltr">{r.guest_civil_id ?? "—"}</td>
-                    <td className="p-3" dir="ltr">{phone}</td>
-                    <td className="p-3">{r.guest_residence ?? "—"}</td>
-                    <td className="p-3">{r.courses?.title ?? "—"}</td>
-                    <td className="p-3">{r.slot ?? "—"}</td>
-                    <td className="p-3 text-brand-navy/50">{formatDateAr(r.created_at)}</td>
-                    <td className="p-3">
-                      <RegistrationActions reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {grouped.length === 0 ? (
+        <p className="p-6 text-center text-xs text-brand-navy/40 bg-white rounded-xl border border-brand-navy/5">لا توجد تسجيلات.</p>
+      ) : (
+        <div className="space-y-6">
+          {grouped.map((g) => {
+            const confirmedCount = g.rows.filter((r) => r.status === "confirmed").length;
+            const activeCount = g.rows.filter((r) => r.status !== "cancelled").length;
+            const remaining = g.seatsTotal > 0 ? Math.max(0, g.seatsTotal - activeCount) : null;
+            return (
+              <div key={g.course_id} className="bg-white border border-brand-navy/5 rounded-xl overflow-hidden">
+                <div className="bg-brand-sage/30 px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-brand-navy/5">
+                  <h3 className="font-serif text-base">{g.title}</h3>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="bg-white text-brand-navy/70 px-2 py-1 rounded-full border border-brand-navy/10">المسجلون: {g.rows.length}</span>
+                    <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">مؤكدون: {confirmedCount}</span>
+                    {g.seatsTotal > 0 && (
+                      <span className={`px-2 py-1 rounded-full ${remaining === 0 ? "bg-red-100 text-red-700" : "bg-brand-blush text-brand-navy/70"}`}>
+                        المتبقي: {remaining} / {g.seatsTotal}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-brand-sage/20 text-brand-navy/70">
+                      <tr>
+                        <th className="text-start p-3">الاسم</th>
+                        <th className="text-start p-3">الرقم المدني</th>
+                        <th className="text-start p-3">الهاتف</th>
+                        <th className="text-start p-3">مكان السكن</th>
+                        <th className="text-start p-3">الموعد</th>
+                        <th className="text-start p-3">الحالة</th>
+                        <th className="text-start p-3">التاريخ</th>
+                        <th className="text-start p-3">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-navy/5">
+                      {g.rows.map((r) => {
+                        const name = r.profiles?.full_name ?? r.guest_name ?? "—";
+                        const phone = r.profiles?.phone ?? r.guest_phone ?? "—";
+                        const email = r.profiles?.email ?? "";
+                        return (
+                          <tr key={r.id} className="hover:bg-brand-sage/20">
+                            <td className="p-3">
+                              <p className="font-medium">{name}</p>
+                              {email && <p className="text-[10px] text-brand-navy/50" dir="ltr">{email}</p>}
+                              {r.user_id === null && <span className="text-[9px] bg-brand-blush text-brand-navy/70 px-1.5 py-0.5 rounded-full">زائر</span>}
+                            </td>
+                            <td className="p-3" dir="ltr">{r.guest_civil_id ?? "—"}</td>
+                            <td className="p-3" dir="ltr">{phone}</td>
+                            <td className="p-3">{r.guest_residence ?? "—"}</td>
+                            <td className="p-3">{r.slot ?? "—"}</td>
+                            <td className="p-3"><StatusBadge status={r.status} /></td>
+                            <td className="p-3 text-brand-navy/50">{formatDateAr(r.created_at)}</td>
+                            <td className="p-3">
+                              <RegistrationActions reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pending: { label: "بانتظار التأكيد", cls: "bg-amber-100 text-amber-800" },
+    confirmed: { label: "مؤكد", cls: "bg-emerald-100 text-emerald-700" },
+    cancelled: { label: "ملغي", cls: "bg-red-100 text-red-700" },
+  };
+  const v = map[status] ?? map.pending;
+  return <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${v.cls}`}>{v.label}</span>;
 }
 
 function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
@@ -462,6 +518,15 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function setStatus(status: "confirmed" | "pending" | "cancelled") {
+    setBusy(true);
+    const { error } = await supabase.from("registrations").update({ status }).eq("id", reg.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(status === "confirmed" ? "تم تأكيد الحجز" : status === "cancelled" ? "تم إلغاء الحجز" : "تم");
+    onSaved();
+  }
+
   async function del() {
     if (!confirm("حذف التسجيل؟")) return;
     const { error } = await supabase.from("registrations").delete().eq("id", reg.id);
@@ -475,6 +540,23 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
       <DialogContent dir="rtl" className="max-w-md">
         <DialogHeader><DialogTitle>{reg.profiles?.full_name ?? reg.guest_name ?? "—"}</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          <div className="bg-brand-blush/40 p-3 rounded-lg flex items-center justify-between">
+            <div className="text-xs">
+              <p className="text-brand-navy/60">حالة الحجز</p>
+              <StatusBadge status={reg.status} />
+            </div>
+            <div className="flex gap-2">
+              {reg.status !== "confirmed" && (
+                <Button size="sm" onClick={() => setStatus("confirmed")} disabled={busy} className="bg-emerald-600 text-white hover:bg-emerald-700 h-8 text-[11px]">✓ تأكيد</Button>
+              )}
+              {reg.status === "confirmed" && (
+                <Button size="sm" variant="outline" onClick={() => setStatus("pending")} disabled={busy} className="h-8 text-[11px]">إعادة للانتظار</Button>
+              )}
+              {reg.status !== "cancelled" && (
+                <Button size="sm" variant="outline" onClick={() => setStatus("cancelled")} disabled={busy} className="h-8 text-[11px] text-red-600">إلغاء</Button>
+              )}
+            </div>
+          </div>
           <div className="space-y-1">
             <Label className="text-xs">رابط الدفع (اختياري)</Label>
             <div className="flex gap-2">
@@ -720,13 +802,14 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
   const [endDate, setEndDate] = useState(course?.end_date ? formatDateDMY(course.end_date) : "");
   const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
+  const [seatsTotal, setSeatsTotal] = useState<string>(String(course?.seats_total ?? "0"));
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open && !course) {
       setTitle(""); setDescription(""); setAudience("general"); setSessionType("group");
       setHourlyRate("0"); setHoursPerWeek("0"); setStartDate(""); setEndDate("");
-      setSlotsText(""); setMeetingLink("");
+      setSlotsText(""); setMeetingLink(""); setSeatsTotal("0");
     }
   }, [open, course]);
 
@@ -752,6 +835,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       end_date: endISO || null,
       price: totalPrice,
       schedule_slots: slots,
+      seats_total: Math.max(0, Math.floor(Number(seatsTotal) || 0)),
     };
     let courseId = course?.id;
     let error;
@@ -819,8 +903,13 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
           <div className="space-y-2"><Label>المواعيد (موعد في كل سطر)</Label>
             <Textarea value={slotsText} onChange={(e) => setSlotsText(e.target.value)} rows={3} placeholder={"السبت 6 م\nالاثنين 8 م"} />
           </div>
-          <div className="space-y-2"><Label>رابط الاجتماع</Label>
-            <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} dir="ltr" placeholder="https://" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>عدد المقاعد الكلي</Label>
+              <Input type="number" min="0" step="1" value={seatsTotal} onChange={(e) => setSeatsTotal(e.target.value)} dir="ltr" placeholder="0 = غير محدود" />
+            </div>
+            <div className="space-y-2"><Label>رابط الاجتماع</Label>
+              <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} dir="ltr" placeholder="https://" />
+            </div>
           </div>
         </div>
         <DialogFooter>
