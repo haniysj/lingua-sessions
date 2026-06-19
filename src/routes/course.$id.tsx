@@ -37,9 +37,23 @@ function CourseDetail() {
     },
   });
 
+  const { data: seatsTaken = 0, refetch: refetchSeats } = useQuery({
+    queryKey: ["course-seats", id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("course_seats_taken", { _course_id: id });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+  });
+
+  const seatsTotal = Number(course?.seats_total ?? 0);
+  const seatsRemaining = seatsTotal > 0 ? Math.max(0, seatsTotal - seatsTaken) : null;
+  const isFull = seatsTotal > 0 && seatsRemaining === 0;
+
   async function reserve() {
     if (!course) return;
     if (!selectedSlot) { toast.error("اختر موعدًا"); return; }
+    if (isFull) { toast.error("لا توجد مقاعد متاحة"); return; }
     const payload: {
       course_id: string; slot: string;
       user_id?: string;
@@ -61,6 +75,13 @@ function CourseDetail() {
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم حجز مقعدك");
+    refetchSeats();
+    try {
+      const reg = user
+        ? { slot: selectedSlot }
+        : { name: payload.guest_name, civilId: payload.guest_civil_id, phone: payload.guest_phone, residence: payload.guest_residence, slot: selectedSlot };
+      sessionStorage.setItem(`reg:${course.id}`, JSON.stringify(reg));
+    } catch { /* ignore */ }
     navigate({ to: "/pay/$id", params: { id: course.id } });
   }
 
