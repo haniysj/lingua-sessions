@@ -515,6 +515,15 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function setStatus(status: "confirmed" | "pending" | "cancelled") {
+    setBusy(true);
+    const { error } = await supabase.from("registrations").update({ status }).eq("id", reg.id);
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(status === "confirmed" ? "تم تأكيد الحجز" : status === "cancelled" ? "تم إلغاء الحجز" : "تم");
+    onSaved();
+  }
+
   async function del() {
     if (!confirm("حذف التسجيل؟")) return;
     const { error } = await supabase.from("registrations").delete().eq("id", reg.id);
@@ -528,6 +537,23 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
       <DialogContent dir="rtl" className="max-w-md">
         <DialogHeader><DialogTitle>{reg.profiles?.full_name ?? reg.guest_name ?? "—"}</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          <div className="bg-brand-blush/40 p-3 rounded-lg flex items-center justify-between">
+            <div className="text-xs">
+              <p className="text-brand-navy/60">حالة الحجز</p>
+              <StatusBadge status={reg.status} />
+            </div>
+            <div className="flex gap-2">
+              {reg.status !== "confirmed" && (
+                <Button size="sm" onClick={() => setStatus("confirmed")} disabled={busy} className="bg-emerald-600 text-white hover:bg-emerald-700 h-8 text-[11px]">✓ تأكيد</Button>
+              )}
+              {reg.status === "confirmed" && (
+                <Button size="sm" variant="outline" onClick={() => setStatus("pending")} disabled={busy} className="h-8 text-[11px]">إعادة للانتظار</Button>
+              )}
+              {reg.status !== "cancelled" && (
+                <Button size="sm" variant="outline" onClick={() => setStatus("cancelled")} disabled={busy} className="h-8 text-[11px] text-red-600">إلغاء</Button>
+              )}
+            </div>
+          </div>
           <div className="space-y-1">
             <Label className="text-xs">رابط الدفع (اختياري)</Label>
             <div className="flex gap-2">
