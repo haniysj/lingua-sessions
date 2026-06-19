@@ -83,6 +83,7 @@ export type Database = {
           id: string
           price: number
           schedule_slots: Json
+          seats_total: number
           session_type: Database["public"]["Enums"]["course_session_type"]
           start_date: string | null
           title: string
@@ -97,6 +98,7 @@ export type Database = {
           id?: string
           price?: number
           schedule_slots?: Json
+          seats_total?: number
           session_type?: Database["public"]["Enums"]["course_session_type"]
           start_date?: string | null
           title: string
@@ -111,6 +113,7 @@ export type Database = {
           id?: string
           price?: number
           schedule_slots?: Json
+          seats_total?: number
           session_type?: Database["public"]["Enums"]["course_session_type"]
           start_date?: string | null
           title?: string
@@ -304,6 +307,7 @@ export type Database = {
           id: string
           payment_link: string | null
           slot: string | null
+          status: string
           user_id: string | null
         }
         Insert: {
@@ -316,6 +320,7 @@ export type Database = {
           id?: string
           payment_link?: string | null
           slot?: string | null
+          status?: string
           user_id?: string | null
         }
         Update: {
@@ -328,6 +333,7 @@ export type Database = {
           id?: string
           payment_link?: string | null
           slot?: string | null
+          status?: string
           user_id?: string | null
         }
         Relationships: [
