@@ -351,7 +351,7 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     queryFn: async () => {
       const { data, error } = await supabase
         .from("registrations")
-        .select("id, user_id, payment_link, slot, created_at, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type)")
+        .select("id, user_id, payment_link, slot, status, created_at, course_id, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type, seats_total)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id).filter((id): id is string => !!id)));
@@ -376,59 +376,109 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     );
   }, [regs.data, search]);
 
+  // Group registrations by course
+  const grouped = useMemo(() => {
+    const map = new Map<string, { title: string; seatsTotal: number; rows: RegRow[] }>();
+    filtered.forEach((r) => {
+      const key = r.course_id ?? "—";
+      if (!map.has(key)) {
+        map.set(key, {
+          title: r.courses?.title ?? "بدون دورة",
+          seatsTotal: Number(r.courses?.seats_total ?? 0),
+          rows: [],
+        });
+      }
+      map.get(key)!.rows.push(r);
+    });
+    return Array.from(map.entries()).map(([course_id, v]) => ({ course_id, ...v }));
+  }, [filtered]);
+
   return (
     <section className="space-y-4">
       <div className="flex justify-between items-end gap-3">
         <h2 className="font-serif text-2xl">المنتسبون</h2>
         <Input placeholder="بحث بالاسم أو الهاتف أو الرقم المدني" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
       </div>
-      <div className="bg-white border border-brand-navy/5 rounded-xl overflow-x-auto">
-        {filtered.length === 0 ? (
-          <p className="p-6 text-center text-xs text-brand-navy/40">لا توجد تسجيلات.</p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="bg-brand-sage/40 text-brand-navy/70">
-              <tr>
-                <th className="text-start p-3">الاسم</th>
-                <th className="text-start p-3">الرقم المدني</th>
-                <th className="text-start p-3">الهاتف</th>
-                <th className="text-start p-3">مكان السكن</th>
-                <th className="text-start p-3">الدورة</th>
-                <th className="text-start p-3">الموعد</th>
-                <th className="text-start p-3">التاريخ</th>
-                <th className="text-start p-3">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-navy/5">
-              {filtered.map((r) => {
-                const name = r.profiles?.full_name ?? r.guest_name ?? "—";
-                const phone = r.profiles?.phone ?? r.guest_phone ?? "—";
-                const email = r.profiles?.email ?? "";
-                return (
-                  <tr key={r.id} className="hover:bg-brand-sage/20">
-                    <td className="p-3">
-                      <p className="font-medium">{name}</p>
-                      {email && <p className="text-[10px] text-brand-navy/50" dir="ltr">{email}</p>}
-                      {r.user_id === null && <span className="text-[9px] bg-brand-blush text-brand-navy/70 px-1.5 py-0.5 rounded-full">زائر</span>}
-                    </td>
-                    <td className="p-3" dir="ltr">{r.guest_civil_id ?? "—"}</td>
-                    <td className="p-3" dir="ltr">{phone}</td>
-                    <td className="p-3">{r.guest_residence ?? "—"}</td>
-                    <td className="p-3">{r.courses?.title ?? "—"}</td>
-                    <td className="p-3">{r.slot ?? "—"}</td>
-                    <td className="p-3 text-brand-navy/50">{formatDateAr(r.created_at)}</td>
-                    <td className="p-3">
-                      <RegistrationActions reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {grouped.length === 0 ? (
+        <p className="p-6 text-center text-xs text-brand-navy/40 bg-white rounded-xl border border-brand-navy/5">لا توجد تسجيلات.</p>
+      ) : (
+        <div className="space-y-6">
+          {grouped.map((g) => {
+            const confirmedCount = g.rows.filter((r) => r.status === "confirmed").length;
+            const activeCount = g.rows.filter((r) => r.status !== "cancelled").length;
+            const remaining = g.seatsTotal > 0 ? Math.max(0, g.seatsTotal - activeCount) : null;
+            return (
+              <div key={g.course_id} className="bg-white border border-brand-navy/5 rounded-xl overflow-hidden">
+                <div className="bg-brand-sage/30 px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-brand-navy/5">
+                  <h3 className="font-serif text-base">{g.title}</h3>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="bg-white text-brand-navy/70 px-2 py-1 rounded-full border border-brand-navy/10">المسجلون: {g.rows.length}</span>
+                    <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">مؤكدون: {confirmedCount}</span>
+                    {g.seatsTotal > 0 && (
+                      <span className={`px-2 py-1 rounded-full ${remaining === 0 ? "bg-red-100 text-red-700" : "bg-brand-blush text-brand-navy/70"}`}>
+                        المتبقي: {remaining} / {g.seatsTotal}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-brand-sage/20 text-brand-navy/70">
+                      <tr>
+                        <th className="text-start p-3">الاسم</th>
+                        <th className="text-start p-3">الرقم المدني</th>
+                        <th className="text-start p-3">الهاتف</th>
+                        <th className="text-start p-3">مكان السكن</th>
+                        <th className="text-start p-3">الموعد</th>
+                        <th className="text-start p-3">الحالة</th>
+                        <th className="text-start p-3">التاريخ</th>
+                        <th className="text-start p-3">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-navy/5">
+                      {g.rows.map((r) => {
+                        const name = r.profiles?.full_name ?? r.guest_name ?? "—";
+                        const phone = r.profiles?.phone ?? r.guest_phone ?? "—";
+                        const email = r.profiles?.email ?? "";
+                        return (
+                          <tr key={r.id} className="hover:bg-brand-sage/20">
+                            <td className="p-3">
+                              <p className="font-medium">{name}</p>
+                              {email && <p className="text-[10px] text-brand-navy/50" dir="ltr">{email}</p>}
+                              {r.user_id === null && <span className="text-[9px] bg-brand-blush text-brand-navy/70 px-1.5 py-0.5 rounded-full">زائر</span>}
+                            </td>
+                            <td className="p-3" dir="ltr">{r.guest_civil_id ?? "—"}</td>
+                            <td className="p-3" dir="ltr">{phone}</td>
+                            <td className="p-3">{r.guest_residence ?? "—"}</td>
+                            <td className="p-3">{r.slot ?? "—"}</td>
+                            <td className="p-3"><StatusBadge status={r.status} /></td>
+                            <td className="p-3 text-brand-navy/50">{formatDateAr(r.created_at)}</td>
+                            <td className="p-3">
+                              <RegistrationActions reg={r} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-regs"] })} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pending: { label: "بانتظار التأكيد", cls: "bg-amber-100 text-amber-800" },
+    confirmed: { label: "مؤكد", cls: "bg-emerald-100 text-emerald-700" },
+    cancelled: { label: "ملغي", cls: "bg-red-100 text-red-700" },
+  };
+  const v = map[status] ?? map.pending;
+  return <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${v.cls}`}>{v.label}</span>;
 }
 
 function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => void }) {
