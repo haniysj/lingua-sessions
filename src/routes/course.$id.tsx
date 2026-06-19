@@ -130,20 +130,27 @@ function CourseDetail() {
           )}
 
           <div className="pt-2">
-            <h2 className="font-serif text-lg mb-3">المواعيد المتاحة</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-serif text-lg">المواعيد المتاحة</h2>
+              {seatsTotal > 0 && (
+                <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${isFull ? "bg-red-100 text-red-700" : "bg-brand-sage text-brand-navy"}`}>
+                  {isFull ? "اكتملت المقاعد" : `متبقي ${seatsRemaining} من ${seatsTotal} مقعد`}
+                </span>
+              )}
+            </div>
             {slots.length === 0 ? (
               <p className="text-xs text-brand-navy/40">لا توجد مواعيد منشورة.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {slots.map((s) => (
-                  <button key={s} type="button" onClick={() => setSelectedSlot(s)}
-                    className={`px-3 py-2 rounded-lg text-xs border ${selectedSlot === s ? "bg-brand-navy text-white border-brand-navy" : "bg-white text-brand-navy border-brand-navy/10"}`}>{s}</button>
+                  <button key={s} type="button" onClick={() => setSelectedSlot(s)} disabled={isFull}
+                    className={`px-3 py-2 rounded-lg text-xs border ${selectedSlot === s ? "bg-brand-navy text-white border-brand-navy" : "bg-white text-brand-navy border-brand-navy/10"} ${isFull ? "opacity-50 cursor-not-allowed" : ""}`}>{s}</button>
                 ))}
               </div>
             )}
           </div>
 
-          {!user && selectedSlot && (
+          {!user && selectedSlot && !isFull && (
             <div className="pt-2 space-y-3 border-t border-brand-navy/10 pt-4">
               <h2 className="font-serif text-lg">بيانات المنتسب</h2>
               <div className="space-y-2">
@@ -169,8 +176,8 @@ function CourseDetail() {
           )}
 
           <div className="pt-2">
-            <Button onClick={reserve} disabled={busy || !selectedSlot} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90">
-              {busy ? "…" : "احجز وانتقل للدفع"}
+            <Button onClick={reserve} disabled={busy || !selectedSlot || isFull} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90">
+              {isFull ? "اكتملت المقاعد" : busy ? "…" : "احجز وانتقل للدفع"}
             </Button>
           </div>
         </article>
