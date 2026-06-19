@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useSiteSettings } from "@/hooks/use-site-settings";
+import { useAuth } from "@/hooks/use-auth";
 import { formatOmr, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
 
 export const Route = createFileRoute("/pay/$id")({
@@ -12,9 +14,20 @@ export const Route = createFileRoute("/pay/$id")({
 
 const SESSION_LABEL: Record<string, string> = { private: "خاصة (فردية)", group: "جماعية" };
 
+type StoredReg = { name?: string; civilId?: string; phone?: string; residence?: string; slot?: string };
+
 function PayPage() {
   const { id } = Route.useParams();
   const { data: settings } = useSiteSettings();
+  const { user } = useAuth();
+  const [stored, setStored] = useState<StoredReg | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`reg:${id}`);
+      if (raw) setStored(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, [id]);
 
   const { data: course, isLoading } = useQuery({
     queryKey: ["pay-course", id],
@@ -24,6 +37,16 @@ function PayPage() {
         .select("title, description, price, hourly_rate, hours_per_week, start_date, end_date, session_type")
         .eq("id", id).maybeSingle();
       if (error) throw error;
+      return data;
+    },
+  });
+
+  // For logged-in users, fetch their profile to populate the WhatsApp message
+  const { data: profile } = useQuery({
+    queryKey: ["pay-profile", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("full_name, phone").eq("id", user!.id).maybeSingle();
       return data;
     },
   });
@@ -43,9 +66,32 @@ function PayPage() {
   const total = hours * Number(course.hourly_rate ?? 0) || Number(course.price ?? 0);
 
   const waNumber = (settings?.whatsapp_number ?? "").replace(/[^\d+]/g, "");
-  const waMsg = encodeURIComponent(
-    `السلام عليكم،\nأودّ إرسال إيصال الدفع لدورة: ${course.title}\nالمبلغ: ${formatOmr(total)}`
-  );
+
+  const studentName = stored?.name ?? profile?.full_name ?? "";
+  const studentPhone = stored?.phone ?? profile?.phone ?? "";
+  const studentCivil = stored?.civilId ?? "";
+  const slot = stored?.slot ?? "";
+
+  const lines = [
+    "السلام عليكم،",
+    "أرفقت إيصال الدفع الخاص بحجزي في الدورة التالية:",
+    "",
+    "📚 *تفاصيل الدورة*",
+    `• الدورة: ${course.title}`,
+    `• نوع الجلسة: ${SESSION_LABEL[course.session_type] ?? course.session_type}`,
+    course.start_date ? `• تاريخ البدء: ${formatDateAr(course.start_date)}` : "",
+    course.end_date ? `• تاريخ النهاية: ${formatDateAr(course.end_date)}` : "",
+    slot ? `• التوقيت: ${slot}` : "",
+    `• إجمالي الساعات: ${hours}`,
+    `• التكلفة الإجمالية: ${formatOmr(total)}`,
+    "",
+    "👤 *بيانات المنتسب*",
+    studentName ? `• الاسم: ${studentName}` : "",
+    studentCivil ? `• الرقم المدني: ${studentCivil}` : "",
+    studentPhone ? `• رقم الهاتف: ${studentPhone}` : "",
+  ].filter(Boolean);
+
+  const waMsg = encodeURIComponent(lines.join("\n"));
   const waUrl = waNumber ? `https://wa.me/${waNumber.replace(/^\+/, "")}?text=${waMsg}` : null;
 
   return (
@@ -63,6 +109,7 @@ function PayPage() {
           <div className="bg-brand-sage/40 rounded-xl p-4 space-y-2 text-sm">
             {course.start_date && <Row label="من" value={formatDateAr(course.start_date)} />}
             {course.end_date && <Row label="إلى" value={formatDateAr(course.end_date)} />}
+            {slot && <Row label="التوقيت" value={slot} />}
             <Row label="عدد الأسابيع" value={`${weeks}`} />
             <Row label="إجمالي الساعات" value={`${hours}`} />
             <Row label="سعر الساعة" value={formatOmr(course.hourly_rate)} />
@@ -84,7 +131,7 @@ function PayPage() {
 
           <div className="bg-brand-blush/60 border border-brand-gold/20 rounded-xl p-4 space-y-3">
             <p className="text-xs text-brand-navy/75 leading-relaxed">
-              بعد تحويل المبلغ، الرجاء إرسال صورة الإيصال عبر واتساب لتأكيد حجزك.
+              بعد تحويل المبلغ، الرجاء إرسال صورة الإيصال عبر واتساب. سيتم إرفاق تفاصيل الدورة وبياناتك تلقائيًا، وسيقوم مدير المنصة بتأكيد حجزك بعد التحقق.
             </p>
             {waUrl ? (
               <a href={waUrl} target="_blank" rel="noopener noreferrer" className="block text-center bg-emerald-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-emerald-700 transition">
