@@ -51,6 +51,7 @@ type Course = {
   end_date: string | null;
   schedule_slots: string[] | unknown;
   meeting_link: string | null;
+  seats_total: number;
 };
 
 type RegRow = {
@@ -58,12 +59,14 @@ type RegRow = {
   user_id: string | null;
   payment_link: string | null;
   slot: string | null;
+  status: string;
   created_at: string;
+  course_id: string;
   guest_name: string | null;
   guest_civil_id: string | null;
   guest_phone: string | null;
   guest_residence: string | null;
-  courses: { title: string; session_type: string } | null;
+  courses: { title: string; session_type: string; seats_total: number } | null;
   profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
 
