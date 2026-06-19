@@ -835,6 +835,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       end_date: endISO || null,
       price: totalPrice,
       schedule_slots: slots,
+      seats_total: Math.max(0, Math.floor(Number(seatsTotal) || 0)),
     };
     let courseId = course?.id;
     let error;
