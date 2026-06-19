@@ -250,6 +250,9 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                   <span className="bg-brand-sage text-brand-navy text-[9px] font-bold px-2 py-0.5 rounded-full">{AUDIENCE_LABEL[c.audience]}</span>
                   <span className="text-[10px] text-brand-navy/50">{SESSION_LABEL[c.session_type]}</span>
                   <span className="text-brand-gold text-xs font-bold">{formatOmr(total || c.price)}</span>
+                  {Number(c.seats_total) > 0 && (
+                    <span className="text-[10px] bg-brand-blush text-brand-navy/70 px-2 py-0.5 rounded-full">🎟️ {c.seats_total} مقعد</span>
+                  )}
                 </div>
                 <h3 className="font-medium">{c.title}</h3>
                 <p className="text-[11px] text-brand-navy/55">
