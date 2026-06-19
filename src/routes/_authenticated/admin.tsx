@@ -903,8 +903,13 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
           <div className="space-y-2"><Label>المواعيد (موعد في كل سطر)</Label>
             <Textarea value={slotsText} onChange={(e) => setSlotsText(e.target.value)} rows={3} placeholder={"السبت 6 م\nالاثنين 8 م"} />
           </div>
-          <div className="space-y-2"><Label>رابط الاجتماع</Label>
-            <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} dir="ltr" placeholder="https://" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>عدد المقاعد الكلي</Label>
+              <Input type="number" min="0" step="1" value={seatsTotal} onChange={(e) => setSeatsTotal(e.target.value)} dir="ltr" placeholder="0 = غير محدود" />
+            </div>
+            <div className="space-y-2"><Label>رابط الاجتماع</Label>
+              <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} dir="ltr" placeholder="https://" />
+            </div>
           </div>
         </div>
         <DialogFooter>
