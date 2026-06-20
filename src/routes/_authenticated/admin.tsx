@@ -245,7 +245,17 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
         const { data: m } = await supabase.from("course_meetings").select("course_id, meeting_link").in("course_id", ids);
         (m ?? []).forEach((row) => meetings.set(row.course_id, row.meeting_link));
       }
-      return rows.map((r) => ({ ...r, meeting_link: meetings.get(r.id) ?? null })) as Course[];
+      const tIds = Array.from(new Set(rows.map((r) => r.teacher_id).filter((v): v is string => !!v)));
+      const teachers = new Map<string, string | null>();
+      if (tIds.length) {
+        const { data: ts } = await supabase.rpc("get_teachers_public", { _ids: tIds });
+        (ts ?? []).forEach((t) => teachers.set(t.id, t.full_name));
+      }
+      return rows.map((r) => ({
+        ...r,
+        meeting_link: meetings.get(r.id) ?? null,
+        teacher_name: r.teacher_id ? teachers.get(r.teacher_id) ?? null : null,
+      })) as Course[];
     },
   });
 
@@ -270,6 +280,9 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                   {Number(c.seats_total) > 0 && (
                     <span className="text-[10px] bg-brand-blush text-brand-navy/70 px-2 py-0.5 rounded-full">🎟️ {c.seats_total} مقعد</span>
                   )}
+                  {c.teacher_name && (
+                    <span className="text-[10px] bg-brand-navy/5 text-brand-navy/70 px-2 py-0.5 rounded-full">👤 {c.teacher_name}</span>
+                  )}
                 </div>
                 <h3 className="font-medium">{c.title}</h3>
                 <p className="text-[11px] text-brand-navy/55">
@@ -293,6 +306,185 @@ function CoursesSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
         )}
       </div>
     </section>
+  );
+}
+
+/* -------- Teachers -------- */
+function useTeachers() {
+  return useQuery({
+    queryKey: ["admin-teachers"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("list_teachers");
+      if (error) throw error;
+      return (data ?? []) as Teacher[];
+    },
+  });
+}
+
+function TeachersSection() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useTeachers();
+  return (
+    <section className="space-y-4">
+      <div className="flex justify-between items-end">
+        <h2 className="font-serif text-2xl">المعلمون</h2>
+        <TeacherDialog onSaved={() => qc.invalidateQueries({ queryKey: ["admin-teachers"] })} />
+      </div>
+      {isLoading ? (
+        <p className="text-xs text-brand-navy/40">…</p>
+      ) : (data ?? []).length === 0 ? (
+        <p className="text-xs text-brand-navy/40 text-center py-6 bg-white rounded-xl border border-brand-navy/5">لا يوجد معلمون مسجلون بعد.</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {data!.map((t) => (
+            <div key={t.id} className="bg-white border border-brand-navy/5 p-4 rounded-xl flex gap-3">
+              {t.avatar_url ? (
+                <img src={t.avatar_url} alt={t.full_name ?? ""} className="size-16 rounded-full object-cover bg-brand-sage/40" />
+              ) : (
+                <div className="size-16 rounded-full bg-brand-sage/60 flex items-center justify-center text-brand-navy/60 font-serif">👤</div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{t.full_name || "—"}</p>
+                {t.email && <p className="text-[10px] text-brand-navy/50 truncate" dir="ltr">{t.email}</p>}
+                {t.phone && <p className="text-[10px] text-brand-navy/50" dir="ltr">{t.phone}</p>}
+                {t.bio && <p className="text-[11px] text-brand-navy/60 mt-1 line-clamp-2">{t.bio}</p>}
+                <div className="flex gap-2 mt-2">
+                  <TeacherDialog teacher={t} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-teachers"] })} />
+                  <DeleteTeacherButton id={t.id} onDeleted={() => {
+                    qc.invalidateQueries({ queryKey: ["admin-teachers"] });
+                    qc.invalidateQueries({ queryKey: ["admin-courses"] });
+                  }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TeacherDialog({ teacher, onSaved }: { teacher?: Teacher; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [fullName, setFullName] = useState(teacher?.full_name ?? "");
+  const [email, setEmail] = useState(teacher?.email ?? "");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState(teacher?.phone ?? "");
+  const [bio, setBio] = useState(teacher?.bio ?? "");
+  const [avatar, setAvatar] = useState(teacher?.avatar_url ?? "");
+  const [busy, setBusy] = useState(false);
+  const create = useServerFn(createTeacher);
+  const update = useServerFn(updateTeacher);
+
+  useEffect(() => {
+    if (!open && !teacher) {
+      setFullName(""); setEmail(""); setPassword(""); setPhone(""); setBio(""); setAvatar("");
+    }
+  }, [open, teacher]);
+
+  function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("صورة فقط"); return; }
+    if (file.size > 500 * 1024) { toast.error("حجم الصورة يجب ألا يتجاوز 500 كيلوبايت"); return; }
+    const reader = new FileReader();
+    reader.onload = () => setAvatar(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  }
+
+  async function save() {
+    if (!fullName.trim()) { toast.error("الاسم مطلوب"); return; }
+    setBusy(true);
+    try {
+      if (teacher) {
+        await update({ data: { id: teacher.id, full_name: fullName.trim(), phone: phone.trim(), bio: bio.trim(), avatar_url: avatar } });
+        toast.success("تم التحديث");
+      } else {
+        if (!email.trim() || !password.trim()) { toast.error("البريد وكلمة المرور مطلوبة"); setBusy(false); return; }
+        if (password.length < 8) { toast.error("كلمة المرور: ٨ أحرف على الأقل"); setBusy(false); return; }
+        await create({ data: { email: email.trim(), password, full_name: fullName.trim(), phone: phone.trim(), bio: bio.trim(), avatar_url: avatar } });
+        toast.success("تمت إضافة المعلم");
+      }
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "خطأ");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {teacher
+          ? <Button size="sm" variant="outline" className="h-7 text-[11px]">تعديل</Button>
+          : <button className="text-[11px] font-semibold uppercase tracking-wider text-brand-gold border-b border-brand-gold/30 pb-0.5">+ معلم جديد</button>}
+      </DialogTrigger>
+      <DialogContent dir="rtl" className="max-w-md max-h-[85vh] overflow-auto">
+        <DialogHeader><DialogTitle>{teacher ? "تعديل معلم" : "إضافة معلم"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            {avatar ? (
+              <img src={avatar} alt="" className="size-16 rounded-full object-cover bg-brand-sage/40" />
+            ) : (
+              <div className="size-16 rounded-full bg-brand-sage/60 flex items-center justify-center text-brand-navy/60">👤</div>
+            )}
+            <div className="flex flex-col gap-1">
+              <Input type="file" accept="image/*" onChange={onPickAvatar} className="text-xs" />
+              {avatar && <button type="button" onClick={() => setAvatar("")} className="text-[11px] text-brand-navy/50 text-start">إزالة الصورة</button>}
+            </div>
+          </div>
+          <div className="space-y-1"><Label className="text-xs">الاسم الكامل</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={150} /></div>
+          {!teacher && (
+            <>
+              <div className="space-y-1"><Label className="text-xs">البريد الإلكتروني</Label><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" dir="ltr" maxLength={255} /></div>
+              <div className="space-y-1"><Label className="text-xs">كلمة المرور المؤقتة</Label><Input value={password} onChange={(e) => setPassword(e.target.value)} type="text" dir="ltr" maxLength={72} /></div>
+            </>
+          )}
+          <div className="space-y-1"><Label className="text-xs">رقم الهاتف</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" maxLength={20} /></div>
+          <div className="space-y-1"><Label className="text-xs">السيرة الذاتية</Label><Textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} maxLength={2000} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
+          <Button onClick={save} disabled={busy} className="bg-brand-navy text-white hover:bg-brand-navy/90">{busy ? "…" : "حفظ"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteTeacherButton({ id, onDeleted }: { id: string; onDeleted: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const del = useServerFn(deleteTeacher);
+  async function go() {
+    setBusy(true);
+    try {
+      await del({ data: { id } });
+      toast.success("تم الحذف");
+      onDeleted();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "خطأ");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 text-[11px] text-red-600 border-red-200 hover:bg-red-50">حذف</Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent dir="rtl">
+        <AlertDialogHeader>
+          <AlertDialogTitle>حذف المعلم؟</AlertDialogTitle>
+          <AlertDialogDescription>سيتم حذف حساب المعلم نهائيًا، وستُلغى ربطه بأي دورات.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>إلغاء</AlertDialogCancel>
+          <AlertDialogAction onClick={go} disabled={busy} className="bg-red-600 hover:bg-red-700">حذف</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
