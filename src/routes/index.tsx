@@ -29,6 +29,17 @@ function HomePage() {
     },
   });
 
+  const teacherIds = Array.from(new Set((courses ?? []).map((c) => c.teacher_id).filter((v): v is string => !!v)));
+  const { data: teachers } = useQuery({
+    queryKey: ["courses-teachers", teacherIds.sort().join(",")],
+    enabled: teacherIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_teachers_public", { _ids: teacherIds });
+      if (error) throw error;
+      return new Map((data ?? []).map((t) => [t.id, t]));
+    },
+  });
+
   const siteName = site?.site_name || "لينغويست";
 
   return (
