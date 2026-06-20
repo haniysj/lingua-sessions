@@ -37,6 +37,16 @@ function CourseDetail() {
     },
   });
 
+  const { data: teacher } = useQuery({
+    queryKey: ["course-teacher", course?.teacher_id],
+    enabled: !!course?.teacher_id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_teachers_public", { _ids: [course!.teacher_id!] });
+      if (error) throw error;
+      return (data ?? [])[0] ?? null;
+    },
+  });
+
   const { data: seatsTaken = 0, refetch: refetchSeats } = useQuery({
     queryKey: ["course-seats", id],
     queryFn: async () => {
