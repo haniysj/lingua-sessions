@@ -889,7 +889,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>تاريخ البداية</Label><DateField value={startDate} onChange={setStartDate} /></div>
-            <div className="space-y-2"><Label>تاريخ النهاية</Label><DateField value={endDate} onChange={setEndDate} /></div>
+            <div className="space-y-2"><Label>تاريخ النهاية</Label><DateField value={endDate} onChange={setEndDate} minDate={parseDMYtoISO(startDate) || undefined} defaultMonth={parseDMYtoISO(startDate) || undefined} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>ساعات/أسبوع</Label><Input type="number" min="0" step="0.5" value={hoursPerWeek} onChange={(e) => setHoursPerWeek(e.target.value)} dir="ltr" /></div>
