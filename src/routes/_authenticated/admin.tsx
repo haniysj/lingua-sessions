@@ -1123,6 +1123,18 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
               <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} dir="ltr" placeholder="https://" />
             </div>
           </div>
+          <div className="space-y-2">
+            <Label>المعلم</Label>
+            <Select value={teacherId || "none"} onValueChange={(v) => setTeacherId(v === "none" ? "" : v)}>
+              <SelectTrigger><SelectValue placeholder="بدون معلم" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— بدون —</SelectItem>
+                {(teachers.data ?? []).map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.full_name || t.email || t.id.slice(0, 6)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
