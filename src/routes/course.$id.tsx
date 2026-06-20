@@ -122,6 +122,21 @@ function CourseDetail() {
           </div>
           <p className="text-sm text-brand-navy/70 leading-relaxed whitespace-pre-line">{course.description}</p>
 
+          {teacher && (
+            <div className="bg-brand-blush/40 rounded-xl p-4 flex gap-3 items-start">
+              {teacher.avatar_url ? (
+                <img src={teacher.avatar_url} alt={teacher.full_name ?? ""} className="size-14 rounded-full object-cover bg-brand-sage/40 shrink-0" />
+              ) : (
+                <div className="size-14 rounded-full bg-brand-sage/60 flex items-center justify-center text-brand-navy/60 shrink-0">👤</div>
+              )}
+              <div className="min-w-0">
+                <p className="text-[10px] text-brand-navy/50 uppercase tracking-wider">معلم الدورة</p>
+                <p className="font-medium">{teacher.full_name || "—"}</p>
+                {teacher.bio && <p className="text-xs text-brand-navy/60 mt-1 whitespace-pre-line">{teacher.bio}</p>}
+              </div>
+            </div>
+          )}
+
           {(course.start_date || course.hours_per_week > 0) && (
             <div className="bg-brand-sage/40 rounded-xl p-4 space-y-2 text-sm">
               <h3 className="font-serif text-base">تفاصيل الدورة</h3>
