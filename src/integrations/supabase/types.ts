@@ -399,7 +399,7 @@ export type Database = {
       course_seats_taken: { Args: { _course_id: string }; Returns: number }
       get_email_by_phone: { Args: { _phone: string }; Returns: string }
       get_payment_info: {
-        Args: { _registration_id: string }
+        Args: never
         Returns: {
           bank_info: string
           whatsapp_number: string
