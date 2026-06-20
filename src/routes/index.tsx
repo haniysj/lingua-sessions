@@ -29,6 +29,17 @@ function HomePage() {
     },
   });
 
+  const teacherIds = Array.from(new Set((courses ?? []).map((c) => c.teacher_id).filter((v): v is string => !!v)));
+  const { data: teachers } = useQuery({
+    queryKey: ["courses-teachers", teacherIds.sort().join(",")],
+    enabled: teacherIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_teachers_public", { _ids: teacherIds });
+      if (error) throw error;
+      return new Map((data ?? []).map((t) => [t.id, t]));
+    },
+  });
+
   const siteName = site?.site_name || "لينغويست";
 
   return (
@@ -64,6 +75,7 @@ function HomePage() {
                 const weeks = weeksBetween(c.start_date, c.end_date);
                 const hours = totalHours(weeks, c.hours_per_week);
                 const total = hours * Number(c.hourly_rate ?? 0) || Number(c.price ?? 0);
+                const teacher = c.teacher_id ? teachers?.get(c.teacher_id) : null;
                 return (
                   <article key={c.id} className="bg-white border border-brand-navy/5 p-5 rounded-xl shadow-sm flex flex-col">
                     <div className="flex justify-between items-start mb-2">
@@ -75,6 +87,16 @@ function HomePage() {
                     <p className="text-[11px] text-brand-navy/55 mb-1">{SESSION_LABEL[c.session_type] ?? c.session_type}</p>
                     {weeks > 0 && (
                       <p className="text-[11px] text-brand-navy/55 mb-3">⏱️ {weeks} أسبوع · {c.hours_per_week} س/أسبوع · {hours} ساعة إجمالًا</p>
+                    )}
+                    {teacher && (
+                      <div className="flex items-center gap-2 mb-3 text-[11px] text-brand-navy/70">
+                        {teacher.avatar_url ? (
+                          <img src={teacher.avatar_url} alt="" className="size-6 rounded-full object-cover" />
+                        ) : (
+                          <div className="size-6 rounded-full bg-brand-sage/60 flex items-center justify-center text-[10px]">👤</div>
+                        )}
+                        <span>المعلم: {teacher.full_name || "—"}</span>
+                      </div>
                     )}
                     <Link to="/course/$id" params={{ id: c.id }} className="text-center bg-brand-navy text-white py-2 rounded-md text-sm font-medium">احجز مقعدك</Link>
                   </article>
