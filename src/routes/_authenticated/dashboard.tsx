@@ -225,20 +225,22 @@ function TakeQuiz({ quizId, title, userId, qc }: { quizId: string; title: string
     queryKey: ["quiz-questions", quizId],
     enabled: open,
     queryFn: async () => {
-      const { data } = await supabase.from("quiz_questions").select("*").eq("quiz_id", quizId).order("position");
-      return data ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any).rpc("get_quiz_questions_public", { _quiz_id: quizId });
+      return (data ?? []) as Array<{ id: string; position: number; prompt: string; choices: string[] }>;
     },
   });
 
   async function submit() {
     if (!questions) return;
     setBusy(true);
-    let score = 0;
-    questions.forEach((q) => { if (answers[q.id] === q.correct_index) score++; });
-    await supabase.from("quiz_attempts").insert({ quiz_id: quizId, user_id: userId, score, total: questions.length, answers });
-    setResult({ score, total: questions.length });
-    qc.invalidateQueries({ queryKey: ["my-quizzes", userId] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc("submit_quiz_attempt", { _quiz_id: quizId, _answers: answers });
     setBusy(false);
+    if (error) { setResult({ score: 0, total: questions.length }); return; }
+    const row = Array.isArray(data) && data.length > 0 ? data[0] : { score: 0, total: questions.length };
+    setResult({ score: Number(row.score ?? 0), total: Number(row.total ?? questions.length) });
+    qc.invalidateQueries({ queryKey: ["my-quizzes", userId] });
   }
 
   return (

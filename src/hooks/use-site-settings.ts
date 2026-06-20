@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rpc = (name: string, args?: Record<string, unknown>) => (supabase as any).rpc(name, args);
+
 export function useSiteSettings() {
   return useQuery({
     queryKey: ["site-settings"],
     queryFn: async () => {
-      const { data } = await (supabase.rpc as never)("get_public_site_settings");
+      const { data } = await rpc("get_public_site_settings");
       const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
       return row
         ? { site_name: row.site_name as string, logo_url: (row.logo_url as string | null) ?? null }
@@ -20,7 +23,7 @@ export function usePaymentInfo(enabled = true) {
     queryKey: ["payment-info"],
     enabled,
     queryFn: async () => {
-      const { data } = await (supabase.rpc as never)("get_payment_info");
+      const { data } = await rpc("get_payment_info");
       const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
       return row
         ? { bank_info: (row.bank_info as string | null) ?? null, whatsapp_number: (row.whatsapp_number as string | null) ?? null }
