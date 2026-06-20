@@ -23,6 +23,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { DateField } from "@/components/DateField";
+import { useServerFn } from "@tanstack/react-start";
+import { createTeacher, updateTeacher, deleteTeacher } from "@/lib/teachers.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
