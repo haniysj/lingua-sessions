@@ -1012,13 +1012,15 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
   const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
   const [seatsTotal, setSeatsTotal] = useState<string>(String(course?.seats_total ?? "0"));
+  const [teacherId, setTeacherId] = useState<string>(course?.teacher_id ?? "");
   const [busy, setBusy] = useState(false);
+  const teachers = useTeachers();
 
   useEffect(() => {
     if (!open && !course) {
       setTitle(""); setDescription(""); setAudience("general"); setSessionType("group");
       setHourlyRate("0"); setHoursPerWeek("0"); setStartDate(""); setEndDate("");
-      setSlotsText(""); setMeetingLink(""); setSeatsTotal("0");
+      setSlotsText(""); setMeetingLink(""); setSeatsTotal("0"); setTeacherId("");
     }
   }, [open, course]);
 
