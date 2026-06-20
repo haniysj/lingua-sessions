@@ -86,6 +86,7 @@ export type Database = {
           seats_total: number
           session_type: Database["public"]["Enums"]["course_session_type"]
           start_date: string | null
+          teacher_id: string | null
           title: string
         }
         Insert: {
@@ -101,6 +102,7 @@ export type Database = {
           seats_total?: number
           session_type?: Database["public"]["Enums"]["course_session_type"]
           start_date?: string | null
+          teacher_id?: string | null
           title: string
         }
         Update: {
@@ -116,9 +118,18 @@ export type Database = {
           seats_total?: number
           session_type?: Database["public"]["Enums"]["course_session_type"]
           start_date?: string | null
+          teacher_id?: string | null
           title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "courses_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       homework_submissions: {
         Row: {
@@ -163,6 +174,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
+          bio: string | null
           created_at: string
           email: string | null
           full_name: string | null
@@ -172,6 +185,8 @@ export type Database = {
           phone: string | null
         }
         Insert: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -181,6 +196,8 @@ export type Database = {
           phone?: string | null
         }
         Update: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -421,12 +438,32 @@ export type Database = {
           prompt: string
         }[]
       }
+      get_teachers_public: {
+        Args: { _ids: string[] }
+        Returns: {
+          avatar_url: string
+          bio: string
+          full_name: string
+          id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      list_teachers: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          bio: string
+          email: string
+          full_name: string
+          id: string
+          phone: string
+        }[]
       }
       submit_quiz_attempt: {
         Args: { _answers: Json; _quiz_id: string }
@@ -437,7 +474,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "student"
+      app_role: "admin" | "student" | "teacher"
       course_audience: "teachers" | "general"
       course_session_type: "private" | "group"
     }
@@ -567,7 +604,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "student"],
+      app_role: ["admin", "student", "teacher"],
       course_audience: ["teachers", "general"],
       course_session_type: ["private", "group"],
     },
