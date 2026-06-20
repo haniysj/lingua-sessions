@@ -54,6 +54,17 @@ type Course = {
   schedule_slots: string[] | unknown;
   meeting_link: string | null;
   seats_total: number;
+  teacher_id: string | null;
+  teacher_name?: string | null;
+};
+
+type Teacher = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  bio: string | null;
 };
 
 type RegRow = {
