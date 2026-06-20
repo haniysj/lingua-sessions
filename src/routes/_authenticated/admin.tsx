@@ -110,6 +110,7 @@ function AdminPage() {
         <Tabs defaultValue="courses" className="w-full">
           <TabsList className="bg-brand-sage/50">
             <TabsTrigger value="courses">الدورات</TabsTrigger>
+            <TabsTrigger value="teachers">المعلمون</TabsTrigger>
             <TabsTrigger value="regs">التسجيلات والطلاب</TabsTrigger>
             <TabsTrigger value="quizzes">الاختبارات</TabsTrigger>
             <TabsTrigger value="settings">إعدادات المنصة</TabsTrigger>
@@ -117,6 +118,9 @@ function AdminPage() {
 
           <TabsContent value="courses" className="mt-6">
             <CoursesSection qc={qc} />
+          </TabsContent>
+          <TabsContent value="teachers" className="mt-6">
+            <TeachersSection />
           </TabsContent>
           <TabsContent value="regs" className="mt-6">
             <RegistrationsSection qc={qc} />
