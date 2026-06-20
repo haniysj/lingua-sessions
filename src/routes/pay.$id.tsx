@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
-import { useSiteSettings } from "@/hooks/use-site-settings";
+import { usePaymentInfo } from "@/hooks/use-site-settings";
 import { useAuth } from "@/hooks/use-auth";
 import { formatOmr, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
 
@@ -18,7 +18,7 @@ type StoredReg = { name?: string; civilId?: string; phone?: string; residence?: 
 
 function PayPage() {
   const { id } = Route.useParams();
-  const { data: settings } = useSiteSettings();
+  const { data: settings } = usePaymentInfo();
   const { user } = useAuth();
   const [stored, setStored] = useState<StoredReg | null>(null);
 
