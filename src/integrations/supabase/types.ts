@@ -398,12 +398,42 @@ export type Database = {
     Functions: {
       course_seats_taken: { Args: { _course_id: string }; Returns: number }
       get_email_by_phone: { Args: { _phone: string }; Returns: string }
+      get_payment_info: {
+        Args: { _registration_id: string }
+        Returns: {
+          bank_info: string
+          whatsapp_number: string
+        }[]
+      }
+      get_public_site_settings: {
+        Args: never
+        Returns: {
+          logo_url: string
+          site_name: string
+        }[]
+      }
+      get_quiz_questions_public: {
+        Args: { _quiz_id: string }
+        Returns: {
+          choices: Json
+          id: string
+          position: number
+          prompt: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      submit_quiz_attempt: {
+        Args: { _answers: Json; _quiz_id: string }
+        Returns: {
+          score: number
+          total: number
+        }[]
       }
     }
     Enums: {
