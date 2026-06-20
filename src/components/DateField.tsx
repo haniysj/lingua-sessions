@@ -11,12 +11,19 @@ type Props = {
   value: string; // dd/mm/yyyy
   onChange: (v: string) => void;
   placeholder?: string;
+  /** Minimum selectable date (ISO yyyy-mm-dd). Dates before are disabled. */
+  minDate?: string;
+  /** Fallback month shown when no value is set (ISO yyyy-mm-dd). Defaults to today. */
+  defaultMonth?: string;
 };
 
-export function DateField({ value, onChange, placeholder = "dd/mm/yyyy" }: Props) {
+export function DateField({ value, onChange, placeholder = "dd/mm/yyyy", minDate, defaultMonth }: Props) {
   const [open, setOpen] = useState(false);
   const iso = parseDMYtoISO(value);
   const selected = iso ? new Date(iso) : undefined;
+  const min = minDate ? new Date(minDate) : undefined;
+  const fallback = defaultMonth ? new Date(defaultMonth) : new Date();
+  const month = selected ?? min ?? fallback;
 
   return (
     <div className="flex gap-2">
@@ -39,6 +46,11 @@ export function DateField({ value, onChange, placeholder = "dd/mm/yyyy" }: Props
           <Calendar
             mode="single"
             selected={selected}
+            defaultMonth={month}
+            weekStartsOn={0}
+            disabled={min ? { before: min } : undefined}
+            modifiers={{ weekend: (d) => d.getDay() === 5 || d.getDay() === 6 }}
+            modifiersClassNames={{ weekend: "text-destructive font-semibold" }}
             onSelect={(d) => {
               if (d) {
                 onChange(formatDateDMY(d.toISOString()));
