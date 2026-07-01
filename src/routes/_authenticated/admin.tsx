@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { safeUrl } from "@/lib/safe-url";
 import { formatOmr, waLink, weeksBetween, totalHours, formatDateAr, formatDateDMY, parseDMYtoISO } from "@/lib/format";
+import { parseSlot, buildSlot } from "@/lib/slots";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -79,7 +80,12 @@ type RegRow = {
   guest_civil_id: string | null;
   guest_phone: string | null;
   guest_residence: string | null;
-  courses: { title: string; session_type: string; seats_total: number } | null;
+  courses: {
+    title: string; session_type: string; seats_total: number;
+    start_date: string | null; end_date: string | null; hours_per_week: number;
+    hourly_rate: number; price: number; teacher_id: string | null;
+  } | null;
+  teacher_name: string | null;
   profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
 
@@ -563,7 +569,7 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
     queryFn: async () => {
       const { data, error } = await supabase
         .from("registrations")
-        .select("id, user_id, payment_link, slot, status, created_at, course_id, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type, seats_total)")
+        .select("id, user_id, payment_link, slot, status, created_at, course_id, guest_name, guest_civil_id, guest_phone, guest_residence, courses(title, session_type, seats_total, start_date, end_date, hours_per_week, hourly_rate, price, teacher_id)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = Array.from(new Set((data ?? []).map((r) => r.user_id).filter((id): id is string => !!id)));
@@ -572,7 +578,17 @@ function RegistrationsSection({ qc }: { qc: ReturnType<typeof useQueryClient> })
         const { data: profs } = await supabase.from("profiles").select("id, full_name, email, phone, level, level_notes").in("id", userIds);
         profilesById = new Map((profs ?? []).map((p) => [p.id, { full_name: p.full_name, email: p.email, phone: p.phone, level: p.level, level_notes: p.level_notes }]));
       }
-      return (data ?? []).map((r) => ({ ...r, profiles: r.user_id ? (profilesById.get(r.user_id) ?? null) : null })) as unknown as RegRow[];
+      const teacherIds = Array.from(new Set((data ?? []).map((r) => r.courses?.teacher_id).filter((v): v is string => !!v)));
+      const teacherMap = new Map<string, string | null>();
+      if (teacherIds.length) {
+        const { data: ts } = await supabase.rpc("get_teachers_public", { _ids: teacherIds });
+        (ts ?? []).forEach((t) => teacherMap.set(t.id, t.full_name));
+      }
+      return (data ?? []).map((r) => ({
+        ...r,
+        profiles: r.user_id ? (profilesById.get(r.user_id) ?? null) : null,
+        teacher_name: r.courses?.teacher_id ? (teacherMap.get(r.courses.teacher_id) ?? null) : null,
+      })) as unknown as RegRow[];
     },
   });
 

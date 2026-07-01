@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useSiteSettings } from "@/hooks/use-site-settings";
+import { useAuth } from "@/hooks/use-auth";
 import { formatOmr, weeksBetween, totalHours } from "@/lib/format";
 
 export const Route = createFileRoute("/")({
@@ -20,6 +21,8 @@ const SESSION_LABEL: Record<string, string> = { private: "خاصة (فردية)"
 
 function HomePage() {
   const { data: site } = useSiteSettings();
+  const { user, isTeacher } = useAuth();
+
   const { data: courses, isLoading } = useQuery({
     queryKey: ["courses"],
     queryFn: async () => {
@@ -40,21 +43,61 @@ function HomePage() {
     },
   });
 
+  const courseIds = (courses ?? []).map((c) => c.id);
+  const { data: seatsMap } = useQuery({
+    queryKey: ["courses-seats", courseIds.sort().join(",")],
+    enabled: courseIds.length > 0,
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("get_courses_seats_public", { _ids: courseIds });
+      if (error) throw error;
+      const m = new Map<string, number>();
+      (data ?? []).forEach((r: { course_id: string; taken: number }) => m.set(r.course_id, Number(r.taken)));
+      return m;
+    },
+  });
+
+  // Personalized greeting name (student view uses profile, teacher view uses profile too)
+  const { data: myProfile } = useQuery({
+    queryKey: ["home-profile", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("full_name").eq("id", user!.id).maybeSingle();
+      return data;
+    },
+  });
+
   const siteName = site?.site_name || "لينغويست";
+  const greetName = myProfile?.full_name?.trim() || user?.email?.split("@")[0] || "بك";
+  const greeting = user
+    ? (isTeacher ? `أهلاً المعلم ${greetName}` : `أهلاً ${greetName}`)
+    : null;
 
   return (
     <div className="min-h-screen text-brand-navy">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-10 space-y-12">
+        {greeting && (
+          <div className="bg-brand-navy text-white rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-brand-navy/20">
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-brand-gold">مرحبًا بك مجددًا</p>
+              <p className="font-serif text-xl md:text-2xl">{greeting} 👋</p>
+            </div>
+            <Link to="/dashboard" className="text-[11px] bg-brand-gold text-white px-3 py-1.5 rounded-lg font-bold">لوحتي ←</Link>
+          </div>
+        )}
+
         <section className="text-center space-y-4 py-8">
           <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-brand-gold">{siteName}</p>
           <h1 className="font-serif text-4xl md:text-5xl leading-tight">أتقن اللغة الإنجليزية بأسلوب أكاديمي راقٍ.</h1>
           <p className="text-sm md:text-base text-brand-navy/60 max-w-xl mx-auto">
             دورات متخصصة لتدريب معلمي اللغة الإنجليزية، ودروس خاصة وجماعية لتطوير مستوى المتعلمين.
           </p>
-          <div className="flex justify-center gap-3 pt-2">
-            <Link to="/auth" className="px-5 py-2.5 rounded-lg bg-brand-navy text-white text-sm font-medium">ابدأ الآن</Link>
-          </div>
+          {!user && (
+            <div className="flex justify-center gap-3 pt-2">
+              <Link to="/auth" className="px-5 py-2.5 rounded-lg bg-brand-navy text-white text-sm font-medium">ابدأ الآن</Link>
+            </div>
+          )}
         </section>
 
         <section className="space-y-4">
@@ -76,6 +119,10 @@ function HomePage() {
                 const hours = totalHours(weeks, c.hours_per_week);
                 const total = hours * Number(c.hourly_rate ?? 0) || Number(c.price ?? 0);
                 const teacher = c.teacher_id ? teachers?.get(c.teacher_id) : null;
+                const seatsTotal = Number(c.seats_total ?? 0);
+                const taken = seatsMap?.get(c.id) ?? 0;
+                const remaining = seatsTotal > 0 ? Math.max(0, seatsTotal - taken) : null;
+                const full = seatsTotal > 0 && remaining === 0;
                 return (
                   <article key={c.id} className="bg-white border border-brand-navy/5 p-5 rounded-xl shadow-sm flex flex-col">
                     <div className="flex justify-between items-start mb-2">
@@ -88,17 +135,28 @@ function HomePage() {
                     {weeks > 0 && (
                       <p className="text-[11px] text-brand-navy/55 mb-3">⏱️ {weeks} أسبوع · {c.hours_per_week} س/أسبوع · {hours} ساعة إجمالًا</p>
                     )}
-                    {teacher && (
-                      <div className="flex items-center gap-2 mb-3 text-[11px] text-brand-navy/70">
-                        {teacher.avatar_url ? (
-                          <img src={teacher.avatar_url} alt="" className="size-6 rounded-full object-cover" />
-                        ) : (
-                          <div className="size-6 rounded-full bg-brand-sage/60 flex items-center justify-center text-[10px]">👤</div>
-                        )}
-                        <span>المعلم: {teacher.full_name || "—"}</span>
-                      </div>
-                    )}
-                    <Link to="/course/$id" params={{ id: c.id }} className="text-center bg-brand-navy text-white py-2 rounded-md text-sm font-medium">احجز مقعدك</Link>
+                    <div className="flex flex-wrap items-center gap-2 mb-3 text-[11px] text-brand-navy/70">
+                      {teacher ? (
+                        <div className="flex items-center gap-2">
+                          {teacher.avatar_url ? (
+                            <img src={teacher.avatar_url} alt="" className="size-6 rounded-full object-cover" />
+                          ) : (
+                            <div className="size-6 rounded-full bg-brand-sage/60 flex items-center justify-center text-[10px]">👤</div>
+                          )}
+                          <span>المعلم: {teacher.full_name || "—"}</span>
+                        </div>
+                      ) : (
+                        <span className="text-brand-navy/40">المعلم: —</span>
+                      )}
+                      {seatsTotal > 0 && (
+                        <span className={`px-2 py-0.5 rounded-full font-bold ${full ? "bg-red-100 text-red-700" : "bg-brand-blush text-brand-navy/80"}`}>
+                          {full ? "اكتملت المقاعد" : `المقاعد: ${remaining} / ${seatsTotal}`}
+                        </span>
+                      )}
+                    </div>
+                    <Link to="/course/$id" params={{ id: c.id }} className="text-center bg-brand-navy text-white py-2 rounded-md text-sm font-medium">
+                      {full ? "عرض التفاصيل" : "احجز مقعدك"}
+                    </Link>
                   </article>
                 );
               })}
