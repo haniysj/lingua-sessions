@@ -80,7 +80,12 @@ type RegRow = {
   guest_civil_id: string | null;
   guest_phone: string | null;
   guest_residence: string | null;
-  courses: { title: string; session_type: string; seats_total: number } | null;
+  courses: {
+    title: string; session_type: string; seats_total: number;
+    start_date: string | null; end_date: string | null; hours_per_week: number;
+    hourly_rate: number; price: number; teacher_id: string | null;
+  } | null;
+  teacher_name: string | null;
   profiles: { full_name: string | null; email: string | null; phone: string | null; level: string | null; level_notes: string | null } | null;
 };
 
