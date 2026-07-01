@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { safeUrl } from "@/lib/safe-url";
 import { formatOmr, waLink, weeksBetween, totalHours, formatDateAr, formatDateDMY, parseDMYtoISO } from "@/lib/format";
+import { parseSlot, buildSlot } from "@/lib/slots";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
