@@ -414,6 +414,13 @@ export type Database = {
     }
     Functions: {
       course_seats_taken: { Args: { _course_id: string }; Returns: number }
+      get_courses_seats_public: {
+        Args: { _ids: string[] }
+        Returns: {
+          course_id: string
+          taken: number
+        }[]
+      }
       get_email_by_phone: { Args: { _phone: string }; Returns: string }
       get_payment_info: {
         Args: never

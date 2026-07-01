@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { usePaymentInfo } from "@/hooks/use-site-settings";
 import { useAuth } from "@/hooks/use-auth";
 import { formatOmr, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
+import { parseSlot } from "@/lib/slots";
 
 export const Route = createFileRoute("/pay/$id")({
   head: () => ({ meta: [{ title: "تعليمات الدفع" }] }),
@@ -34,10 +35,20 @@ function PayPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("courses")
-        .select("title, description, price, hourly_rate, hours_per_week, start_date, end_date, session_type")
+        .select("id, title, description, price, hourly_rate, hours_per_week, start_date, end_date, session_type, teacher_id")
         .eq("id", id).maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: teacher } = useQuery({
+    queryKey: ["pay-teacher", course?.teacher_id],
+    enabled: !!course?.teacher_id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_teachers_public", { _ids: [course!.teacher_id!] });
+      if (error) throw error;
+      return (data ?? [])[0] ?? null;
     },
   });
 
@@ -70,7 +81,8 @@ function PayPage() {
   const studentName = stored?.name ?? profile?.full_name ?? "";
   const studentPhone = stored?.phone ?? profile?.phone ?? "";
   const studentCivil = stored?.civilId ?? "";
-  const slot = stored?.slot ?? "";
+  const studentResidence = stored?.residence ?? "";
+  const slot = stored?.slot ? parseSlot(stored.slot).label : "";
 
   const lines = [
     "السلام عليكم،",
@@ -79,6 +91,7 @@ function PayPage() {
     "📚 *تفاصيل الدورة*",
     `• الدورة: ${course.title}`,
     `• نوع الجلسة: ${SESSION_LABEL[course.session_type] ?? course.session_type}`,
+    teacher?.full_name ? `• المعلم: ${teacher.full_name}` : "",
     course.start_date ? `• تاريخ البدء: ${formatDateAr(course.start_date)}` : "",
     course.end_date ? `• تاريخ النهاية: ${formatDateAr(course.end_date)}` : "",
     slot ? `• التوقيت: ${slot}` : "",
@@ -89,10 +102,13 @@ function PayPage() {
     studentName ? `• الاسم: ${studentName}` : "",
     studentCivil ? `• الرقم المدني: ${studentCivil}` : "",
     studentPhone ? `• رقم الهاتف: ${studentPhone}` : "",
+    studentResidence ? `• مكان السكن: ${studentResidence}` : "",
   ].filter(Boolean);
 
   const waMsg = encodeURIComponent(lines.join("\n"));
   const waUrl = waNumber ? `https://wa.me/${waNumber.replace(/^\+/, "")}?text=${waMsg}` : null;
+
+  const hasStudentInfo = studentName || studentCivil || studentPhone || studentResidence;
 
   return (
     <div className="min-h-screen">
@@ -101,12 +117,39 @@ function PayPage() {
         <Link to="/" className="text-xs text-brand-navy/50">← الرجوع</Link>
         <div className="bg-card border border-brand-navy/10 rounded-2xl p-6 mt-4 shadow-lg space-y-5">
           <header className="text-center space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-brand-gold">تعليمات الدفع</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-brand-gold">ملخص الحجز وتعليمات الدفع</p>
             <h1 className="font-serif text-2xl">{course.title}</h1>
             <p className="text-xs text-brand-navy/55">{SESSION_LABEL[course.session_type] ?? course.session_type}</p>
           </header>
 
+          {hasStudentInfo && (
+            <div className="bg-white border border-brand-navy/10 rounded-xl p-4 space-y-2">
+              <h3 className="font-serif text-base">بيانات المنتسب</h3>
+              {studentName && <Row label="الاسم" value={studentName} />}
+              {studentCivil && <Row label="الرقم المدني" value={studentCivil} />}
+              {studentPhone && <Row label="رقم الهاتف" value={studentPhone} />}
+              {studentResidence && <Row label="مكان السكن" value={studentResidence} />}
+              {slot && <Row label="الموعد المختار" value={slot} />}
+            </div>
+          )}
+
+          {teacher && (
+            <div className="bg-brand-blush/40 border border-brand-gold/20 rounded-xl p-4 flex gap-3 items-start">
+              {teacher.avatar_url ? (
+                <img src={teacher.avatar_url} alt="" className="size-12 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="size-12 rounded-full bg-brand-sage/60 flex items-center justify-center text-brand-navy/60 shrink-0">👤</div>
+              )}
+              <div className="min-w-0">
+                <p className="text-[10px] text-brand-navy/50 uppercase tracking-wider">معلم الدورة</p>
+                <p className="font-medium">{teacher.full_name || "—"}</p>
+                {teacher.bio && <p className="text-[11px] text-brand-navy/60 mt-1 line-clamp-3">{teacher.bio}</p>}
+              </div>
+            </div>
+          )}
+
           <div className="bg-brand-sage/40 rounded-xl p-4 space-y-2 text-sm">
+            <h3 className="font-serif text-base mb-1">تفاصيل الدورة</h3>
             {course.start_date && <Row label="من" value={formatDateAr(course.start_date)} />}
             {course.end_date && <Row label="إلى" value={formatDateAr(course.end_date)} />}
             {slot && <Row label="التوقيت" value={slot} />}

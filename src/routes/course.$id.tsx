@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { formatOmr, weeksBetween, totalHours, formatDateAr } from "@/lib/format";
+import { parseSlot } from "@/lib/slots";
 
 export const Route = createFileRoute("/course/$id")({
   component: CourseDetail,
@@ -19,7 +20,7 @@ const SESSION_LABEL: Record<string, string> = { private: "خاصة (فردية)"
 
 function CourseDetail() {
   const { id } = Route.useParams();
-  const { user } = useAuth();
+  const { user, isTeacher } = useAuth();
   const navigate = useNavigate();
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +63,10 @@ function CourseDetail() {
 
   async function reserve() {
     if (!course) return;
+    if (isTeacher) { toast.error("لا يمكن للمعلم التسجيل كطالب"); return; }
     if (!selectedSlot) { toast.error("اختر موعدًا"); return; }
+    const selected = parseSlot(selectedSlot);
+    if (selected.comingSoon) { toast.error("هذا الموعد قريبًا وغير متاح للحجز بعد"); return; }
     if (isFull) { toast.error("لا توجد مقاعد متاحة"); return; }
     const payload: {
       course_id: string; slot: string;
@@ -167,44 +171,67 @@ function CourseDetail() {
               <p className="text-xs text-brand-navy/40">لا توجد مواعيد منشورة.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {slots.map((s) => (
-                  <button key={s} type="button" onClick={() => setSelectedSlot(s)} disabled={isFull}
-                    className={`px-3 py-2 rounded-lg text-xs border ${selectedSlot === s ? "bg-brand-navy text-white border-brand-navy" : "bg-white text-brand-navy border-brand-navy/10"} ${isFull ? "opacity-50 cursor-not-allowed" : ""}`}>{s}</button>
-                ))}
+                {slots.map((s) => {
+                  const parsed = parseSlot(s);
+                  const disabled = isFull || parsed.comingSoon;
+                  const selected = selectedSlot === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => !disabled && setSelectedSlot(s)}
+                      disabled={disabled}
+                      className={`px-3 py-2 rounded-lg text-xs border relative ${selected ? "bg-brand-navy text-white border-brand-navy" : "bg-white text-brand-navy border-brand-navy/10"} ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+                    >
+                      <span>{parsed.label}</span>
+                      {parsed.comingSoon && (
+                        <span className="ms-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-gold/20 text-brand-gold border border-brand-gold/30">قريباً</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {!user && selectedSlot && !isFull && (
-            <div className="pt-2 space-y-3 border-t border-brand-navy/10 pt-4">
-              <h2 className="font-serif text-lg">بيانات المنتسب</h2>
-              <div className="space-y-2">
-                <Label className="text-xs">الاسم الثلاثي</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="text-xs">الرقم المدني</Label>
-                  <Input value={civilId} onChange={(e) => setCivilId(e.target.value)} maxLength={20} dir="ltr" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">رقم الهاتف</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} dir="ltr" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs">مكان السكن</Label>
-                <Input value={residence} onChange={(e) => setResidence(e.target.value)} maxLength={150} />
-              </div>
-              <p className="text-[11px] text-brand-navy/50">يمكنك أيضًا <Link to="/auth" className="text-brand-gold underline">تسجيل الدخول</Link> إن كان لديك حساب.</p>
+          {isTeacher ? (
+            <div className="bg-brand-blush/60 border border-brand-gold/30 rounded-xl p-4 text-xs text-brand-navy/70 text-center">
+              أنت مسجّل كمعلم في المنصة — لا يمكن للمعلم التسجيل كطالب في الدورات.
             </div>
-          )}
+          ) : (
+            <>
+              {!user && selectedSlot && !isFull && !parseSlot(selectedSlot).comingSoon && (
+                <div className="pt-2 space-y-3 border-t border-brand-navy/10 pt-4">
+                  <h2 className="font-serif text-lg">بيانات المنتسب</h2>
+                  <div className="space-y-2">
+                    <Label className="text-xs">الاسم الثلاثي</Label>
+                    <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">الرقم المدني</Label>
+                      <Input value={civilId} onChange={(e) => setCivilId(e.target.value)} maxLength={20} dir="ltr" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">رقم الهاتف</Label>
+                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} dir="ltr" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">مكان السكن</Label>
+                    <Input value={residence} onChange={(e) => setResidence(e.target.value)} maxLength={150} />
+                  </div>
+                  <p className="text-[11px] text-brand-navy/50">يمكنك أيضًا <Link to="/auth" className="text-brand-gold underline">تسجيل الدخول</Link> إن كان لديك حساب.</p>
+                </div>
+              )}
 
-          <div className="pt-2">
-            <Button onClick={reserve} disabled={busy || !selectedSlot || isFull} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90">
-              {isFull ? "اكتملت المقاعد" : busy ? "…" : "احجز وانتقل للدفع"}
-            </Button>
-          </div>
+              <div className="pt-2">
+                <Button onClick={reserve} disabled={busy || !selectedSlot || isFull || (!!selectedSlot && parseSlot(selectedSlot).comingSoon)} className="w-full bg-brand-navy text-white hover:bg-brand-navy/90">
+                  {isFull ? "اكتملت المقاعد" : busy ? "…" : "احجز وانتقل للدفع"}
+                </Button>
+              </div>
+            </>
+          )}
         </article>
       </main>
     </div>
