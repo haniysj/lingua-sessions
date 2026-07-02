@@ -715,6 +715,7 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
   const [level, setLevel] = useState(reg.profiles?.level ?? "");
   const [levelNotes, setLevelNotes] = useState(reg.profiles?.level_notes ?? "");
   const [busy, setBusy] = useState(false);
+  const [waPromptOpen, setWaPromptOpen] = useState(false);
 
   async function saveLink() {
     const cleaned = link.trim();
@@ -735,6 +736,48 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
     toast.success("تم التحديث"); onSaved();
   }
 
+  function buildConfirmationMessage() {
+    const name = reg.profiles?.full_name ?? reg.guest_name ?? "";
+    const c = reg.courses;
+    const slot = reg.slot ? parseSlot(reg.slot).label : "";
+    const weeks = weeksBetween(c?.start_date ?? null, c?.end_date ?? null);
+    const hours = totalHours(weeks, Number(c?.hours_per_week ?? 0));
+    const total = hours * Number(c?.hourly_rate ?? 0) || Number(c?.price ?? 0);
+    const phone = reg.profiles?.phone ?? reg.guest_phone;
+    const lines = [
+      `أهلاً ${name} 👋`,
+      "",
+      "يسعدنا إخبارك بأنه *تم تأكيد حجزك* في الدورة التالية:",
+      "",
+      "📚 *تفاصيل الدورة*",
+      c?.title ? `• الدورة: ${c.title}` : "",
+      c?.session_type ? `• نوع الجلسة: ${SESSION_LABEL[c.session_type] ?? c.session_type}` : "",
+      reg.teacher_name ? `• المعلم: ${reg.teacher_name}` : "",
+      c?.start_date ? `• تاريخ البدء: ${formatDateAr(c.start_date)}` : "",
+      c?.end_date ? `• تاريخ النهاية: ${formatDateAr(c.end_date)}` : "",
+      slot ? `• التوقيت: ${slot}` : "",
+      hours ? `• إجمالي الساعات: ${hours}` : "",
+      total ? `• التكلفة: ${formatOmr(total)}` : "",
+      "",
+      "👤 *بياناتك*",
+      name ? `• الاسم: ${name}` : "",
+      reg.guest_civil_id ? `• الرقم المدني: ${reg.guest_civil_id}` : "",
+      phone ? `• الهاتف: ${phone}` : "",
+      reg.guest_residence ? `• مكان السكن: ${reg.guest_residence}` : "",
+      "",
+      "بالتوفيق 🌟",
+    ].filter(Boolean);
+    return lines.join("\n");
+  }
+
+  function sendConfirmationWhatsApp() {
+    const phone = reg.profiles?.phone ?? reg.guest_phone;
+    const url = waLink(phone, buildConfirmationMessage());
+    if (!url) { toast.error("لا يوجد رقم هاتف للمنتسب"); return; }
+    window.open(url, "_blank", "noopener,noreferrer");
+    setWaPromptOpen(false);
+  }
+
   function sendWhatsApp() {
     const phone = reg.profiles?.phone ?? reg.guest_phone;
     const msg = `أهلاً ${reg.profiles?.full_name ?? reg.guest_name ?? ""} 👋\nبخصوص حجزك في *${reg.courses?.title ?? "دورتك"}*`;
@@ -750,6 +793,7 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
     if (error) { toast.error(error.message); return; }
     toast.success(status === "confirmed" ? "تم تأكيد الحجز" : status === "cancelled" ? "تم إلغاء الحجز" : "تم");
     onSaved();
+    if (status === "confirmed") setWaPromptOpen(true);
   }
 
   async function del() {
@@ -760,6 +804,7 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="sm" variant="outline" className="h-7 text-[10px]">إدارة</Button></DialogTrigger>
       <DialogContent dir="rtl" className="max-w-md">
@@ -813,6 +858,22 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={waPromptOpen} onOpenChange={setWaPromptOpen}>
+      <AlertDialogContent dir="rtl">
+        <AlertDialogHeader>
+          <AlertDialogTitle>هل تريد إرسال تأكيد الحجز عبر واتساب للدارس؟</AlertDialogTitle>
+          <AlertDialogDescription>
+            سيتم فتح واتساب برسالة جاهزة تحتوي على تفاصيل الدورة، اسم المعلم، والبيانات الشخصية للدارس.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>لا، شكرًا</AlertDialogCancel>
+          <AlertDialogAction onClick={sendConfirmationWhatsApp} className="bg-emerald-600 hover:bg-emerald-700">💬 إرسال عبر واتساب</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
