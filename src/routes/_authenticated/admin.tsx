@@ -715,6 +715,7 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
   const [level, setLevel] = useState(reg.profiles?.level ?? "");
   const [levelNotes, setLevelNotes] = useState(reg.profiles?.level_notes ?? "");
   const [busy, setBusy] = useState(false);
+  const [waPromptOpen, setWaPromptOpen] = useState(false);
 
   async function saveLink() {
     const cleaned = link.trim();
@@ -735,6 +736,48 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
     toast.success("تم التحديث"); onSaved();
   }
 
+  function buildConfirmationMessage() {
+    const name = reg.profiles?.full_name ?? reg.guest_name ?? "";
+    const c = reg.courses;
+    const slot = reg.slot ? parseSlot(reg.slot).label : "";
+    const weeks = weeksBetween(c?.start_date ?? null, c?.end_date ?? null);
+    const hours = totalHours(weeks, Number(c?.hours_per_week ?? 0));
+    const total = hours * Number(c?.hourly_rate ?? 0) || Number(c?.price ?? 0);
+    const phone = reg.profiles?.phone ?? reg.guest_phone;
+    const lines = [
+      `أهلاً ${name} 👋`,
+      "",
+      "يسعدنا إخبارك بأنه *تم تأكيد حجزك* في الدورة التالية:",
+      "",
+      "📚 *تفاصيل الدورة*",
+      c?.title ? `• الدورة: ${c.title}` : "",
+      c?.session_type ? `• نوع الجلسة: ${SESSION_LABEL[c.session_type] ?? c.session_type}` : "",
+      reg.teacher_name ? `• المعلم: ${reg.teacher_name}` : "",
+      c?.start_date ? `• تاريخ البدء: ${formatDateAr(c.start_date)}` : "",
+      c?.end_date ? `• تاريخ النهاية: ${formatDateAr(c.end_date)}` : "",
+      slot ? `• التوقيت: ${slot}` : "",
+      hours ? `• إجمالي الساعات: ${hours}` : "",
+      total ? `• التكلفة: ${formatOmr(total)}` : "",
+      "",
+      "👤 *بياناتك*",
+      name ? `• الاسم: ${name}` : "",
+      reg.guest_civil_id ? `• الرقم المدني: ${reg.guest_civil_id}` : "",
+      phone ? `• الهاتف: ${phone}` : "",
+      reg.guest_residence ? `• مكان السكن: ${reg.guest_residence}` : "",
+      "",
+      "بالتوفيق 🌟",
+    ].filter(Boolean);
+    return lines.join("\n");
+  }
+
+  function sendConfirmationWhatsApp() {
+    const phone = reg.profiles?.phone ?? reg.guest_phone;
+    const url = waLink(phone, buildConfirmationMessage());
+    if (!url) { toast.error("لا يوجد رقم هاتف للمنتسب"); return; }
+    window.open(url, "_blank", "noopener,noreferrer");
+    setWaPromptOpen(false);
+  }
+
   function sendWhatsApp() {
     const phone = reg.profiles?.phone ?? reg.guest_phone;
     const msg = `أهلاً ${reg.profiles?.full_name ?? reg.guest_name ?? ""} 👋\nبخصوص حجزك في *${reg.courses?.title ?? "دورتك"}*`;
@@ -750,6 +793,7 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
     if (error) { toast.error(error.message); return; }
     toast.success(status === "confirmed" ? "تم تأكيد الحجز" : status === "cancelled" ? "تم إلغاء الحجز" : "تم");
     onSaved();
+    if (status === "confirmed") setWaPromptOpen(true);
   }
 
   async function del() {
@@ -760,6 +804,7 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="sm" variant="outline" className="h-7 text-[10px]">إدارة</Button></DialogTrigger>
       <DialogContent dir="rtl" className="max-w-md">
@@ -813,6 +858,22 @@ function RegistrationActions({ reg, onSaved }: { reg: RegRow; onSaved: () => voi
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={waPromptOpen} onOpenChange={setWaPromptOpen}>
+      <AlertDialogContent dir="rtl">
+        <AlertDialogHeader>
+          <AlertDialogTitle>هل تريد إرسال تأكيد الحجز عبر واتساب للدارس؟</AlertDialogTitle>
+          <AlertDialogDescription>
+            سيتم فتح واتساب برسالة جاهزة تحتوي على تفاصيل الدورة، اسم المعلم، والبيانات الشخصية للدارس.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>لا، شكرًا</AlertDialogCancel>
+          <AlertDialogAction onClick={sendConfirmationWhatsApp} className="bg-emerald-600 hover:bg-emerald-700">💬 إرسال عبر واتساب</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -1025,7 +1086,14 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
   const [hoursPerWeek, setHoursPerWeek] = useState<string>(String(course?.hours_per_week ?? "0"));
   const [startDate, setStartDate] = useState(course?.start_date ? formatDateDMY(course.start_date) : "");
   const [endDate, setEndDate] = useState(course?.end_date ? formatDateDMY(course.end_date) : "");
-  const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
+  const [slots, setSlots] = useState<{ label: string; comingSoon: boolean }[]>(
+    Array.isArray(course?.schedule_slots)
+      ? (course!.schedule_slots as string[]).map((s) => {
+          const p = parseSlot(s);
+          return { label: p.label, comingSoon: p.comingSoon };
+        })
+      : []
+  );
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
   const [seatsTotal, setSeatsTotal] = useState<string>(String(course?.seats_total ?? "0"));
   const [teacherId, setTeacherId] = useState<string>(course?.teacher_id ?? "");
@@ -1036,7 +1104,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     if (!open && !course) {
       setTitle(""); setDescription(""); setAudience("general"); setSessionType("group");
       setHourlyRate("0"); setHoursPerWeek("0"); setStartDate(""); setEndDate("");
-      setSlotsText(""); setMeetingLink(""); setSeatsTotal("0"); setTeacherId("");
+      setSlots([]); setMeetingLink(""); setSeatsTotal("0"); setTeacherId("");
     }
   }, [open, course]);
 
@@ -1051,7 +1119,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     const link = meetingLink.trim() || null;
     if (link && !safeUrl(link)) { toast.error("رابط الاجتماع غير صالح"); return; }
     setBusy(true);
-    const slots = slotsText.split("\n").map((s) => s.trim()).filter(Boolean);
+    const cleanedSlots = slots.map((s) => buildSlot(s.label, s.comingSoon)).filter(Boolean);
     const payload = {
       title: title.trim(),
       description: description.trim(),
@@ -1061,7 +1129,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       start_date: startISO || null,
       end_date: endISO || null,
       price: totalPrice,
-      schedule_slots: slots,
+      schedule_slots: cleanedSlots,
       seats_total: Math.max(0, Math.floor(Number(seatsTotal) || 0)),
       teacher_id: teacherId || null,
     };
@@ -1128,8 +1196,47 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
             <div className="flex justify-between"><span>إجمالي الساعات</span><span className="font-bold">{hours}</span></div>
             <div className="flex justify-between text-brand-navy"><span>الإجمالي</span><span className="font-serif text-base font-bold">{formatOmr(totalPrice)}</span></div>
           </div>
-          <div className="space-y-2"><Label>المواعيد (موعد في كل سطر)</Label>
-            <Textarea value={slotsText} onChange={(e) => setSlotsText(e.target.value)} rows={3} placeholder={"السبت 6 م\nالاثنين 8 م"} />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>المواعيد المتاحة</Label>
+              <button
+                type="button"
+                onClick={() => setSlots((s) => [...s, { label: "", comingSoon: false }])}
+                className="text-[11px] font-semibold text-brand-gold border-b border-brand-gold/30 pb-0.5"
+              >+ إضافة موعد</button>
+            </div>
+            {slots.length === 0 && (
+              <p className="text-[11px] text-brand-navy/40 text-center py-3 border border-dashed border-brand-navy/15 rounded-lg">
+                لا توجد مواعيد. اضغط "إضافة موعد" لإضافة أول موعد.
+              </p>
+            )}
+            <div className="space-y-2">
+              {slots.map((s, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2 bg-brand-sage/20 border border-brand-navy/5 p-2 rounded-lg">
+                  <Input
+                    value={s.label}
+                    onChange={(e) => setSlots((arr) => arr.map((x, xi) => xi === i ? { ...x, label: e.target.value } : x))}
+                    placeholder="مثال: السبت 6 م"
+                    className="flex-1 min-w-[140px] h-8 text-xs bg-white"
+                  />
+                  <label className="flex items-center gap-1.5 text-[11px] text-brand-navy/70 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={s.comingSoon}
+                      onChange={(e) => setSlots((arr) => arr.map((x, xi) => xi === i ? { ...x, comingSoon: e.target.checked } : x))}
+                      className="accent-brand-gold"
+                    />
+                    قريباً
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setSlots((arr) => arr.filter((_, xi) => xi !== i))}
+                    className="text-red-600 text-xs px-1"
+                    aria-label="حذف الموعد"
+                  >×</button>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>عدد المقاعد الكلي</Label>
