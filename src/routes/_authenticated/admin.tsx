@@ -1104,7 +1104,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     if (!open && !course) {
       setTitle(""); setDescription(""); setAudience("general"); setSessionType("group");
       setHourlyRate("0"); setHoursPerWeek("0"); setStartDate(""); setEndDate("");
-      setSlotsText(""); setMeetingLink(""); setSeatsTotal("0"); setTeacherId("");
+      setSlots([]); setMeetingLink(""); setSeatsTotal("0"); setTeacherId("");
     }
   }, [open, course]);
 
