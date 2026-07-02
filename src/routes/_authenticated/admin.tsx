@@ -1196,8 +1196,47 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
             <div className="flex justify-between"><span>إجمالي الساعات</span><span className="font-bold">{hours}</span></div>
             <div className="flex justify-between text-brand-navy"><span>الإجمالي</span><span className="font-serif text-base font-bold">{formatOmr(totalPrice)}</span></div>
           </div>
-          <div className="space-y-2"><Label>المواعيد (موعد في كل سطر)</Label>
-            <Textarea value={slotsText} onChange={(e) => setSlotsText(e.target.value)} rows={3} placeholder={"السبت 6 م\nالاثنين 8 م"} />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>المواعيد المتاحة</Label>
+              <button
+                type="button"
+                onClick={() => setSlots((s) => [...s, { label: "", comingSoon: false }])}
+                className="text-[11px] font-semibold text-brand-gold border-b border-brand-gold/30 pb-0.5"
+              >+ إضافة موعد</button>
+            </div>
+            {slots.length === 0 && (
+              <p className="text-[11px] text-brand-navy/40 text-center py-3 border border-dashed border-brand-navy/15 rounded-lg">
+                لا توجد مواعيد. اضغط "إضافة موعد" لإضافة أول موعد.
+              </p>
+            )}
+            <div className="space-y-2">
+              {slots.map((s, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2 bg-brand-sage/20 border border-brand-navy/5 p-2 rounded-lg">
+                  <Input
+                    value={s.label}
+                    onChange={(e) => setSlots((arr) => arr.map((x, xi) => xi === i ? { ...x, label: e.target.value } : x))}
+                    placeholder="مثال: السبت 6 م"
+                    className="flex-1 min-w-[140px] h-8 text-xs bg-white"
+                  />
+                  <label className="flex items-center gap-1.5 text-[11px] text-brand-navy/70 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={s.comingSoon}
+                      onChange={(e) => setSlots((arr) => arr.map((x, xi) => xi === i ? { ...x, comingSoon: e.target.checked } : x))}
+                      className="accent-brand-gold"
+                    />
+                    قريباً
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setSlots((arr) => arr.filter((_, xi) => xi !== i))}
+                    className="text-red-600 text-xs px-1"
+                    aria-label="حذف الموعد"
+                  >×</button>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>عدد المقاعد الكلي</Label>
