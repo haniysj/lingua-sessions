@@ -1086,7 +1086,14 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
   const [hoursPerWeek, setHoursPerWeek] = useState<string>(String(course?.hours_per_week ?? "0"));
   const [startDate, setStartDate] = useState(course?.start_date ? formatDateDMY(course.start_date) : "");
   const [endDate, setEndDate] = useState(course?.end_date ? formatDateDMY(course.end_date) : "");
-  const [slotsText, setSlotsText] = useState(Array.isArray(course?.schedule_slots) ? (course!.schedule_slots as string[]).join("\n") : "");
+  const [slots, setSlots] = useState<{ label: string; comingSoon: boolean }[]>(
+    Array.isArray(course?.schedule_slots)
+      ? (course!.schedule_slots as string[]).map((s) => {
+          const p = parseSlot(s);
+          return { label: p.label, comingSoon: p.comingSoon };
+        })
+      : []
+  );
   const [meetingLink, setMeetingLink] = useState(course?.meeting_link ?? "");
   const [seatsTotal, setSeatsTotal] = useState<string>(String(course?.seats_total ?? "0"));
   const [teacherId, setTeacherId] = useState<string>(course?.teacher_id ?? "");
