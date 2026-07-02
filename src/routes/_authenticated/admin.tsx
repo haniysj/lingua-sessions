@@ -1129,7 +1129,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
       start_date: startISO || null,
       end_date: endISO || null,
       price: totalPrice,
-      schedule_slots: slots,
+      schedule_slots: cleanedSlots,
       seats_total: Math.max(0, Math.floor(Number(seatsTotal) || 0)),
       teacher_id: teacherId || null,
     };
