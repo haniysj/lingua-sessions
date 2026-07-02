@@ -1119,7 +1119,7 @@ function CourseDialog({ course, onSaved }: { course?: Course; onSaved: () => voi
     const link = meetingLink.trim() || null;
     if (link && !safeUrl(link)) { toast.error("رابط الاجتماع غير صالح"); return; }
     setBusy(true);
-    const slots = slotsText.split("\n").map((s) => s.trim()).filter(Boolean);
+    const cleanedSlots = slots.map((s) => buildSlot(s.label, s.comingSoon)).filter(Boolean);
     const payload = {
       title: title.trim(),
       description: description.trim(),
